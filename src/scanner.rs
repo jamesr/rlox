@@ -56,10 +56,10 @@ pub enum TokenValue<'a> {
 }
 
 pub struct Token<'a> {
-    token_type: TokenType,
-    lexeme: &'a str,
-    value: Option<TokenValue<'a>>,
-    line: usize,
+    pub token_type: TokenType,
+    pub lexeme: &'a str,
+    pub value: Option<TokenValue<'a>>,
+    pub line: usize,
 }
 
 impl<'a> fmt::Display for Token<'a> {

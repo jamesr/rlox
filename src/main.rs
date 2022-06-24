@@ -3,6 +3,7 @@ use std::sync::Mutex;
 use std::{env, io};
 use std::{fs::File, io::Read, io::Write};
 
+pub mod ast;
 pub mod scanner;
 
 lazy_static! {
