@@ -362,7 +362,6 @@ impl<'a> Iterator for Scanner<'a> {
             };
             if let Some(token) = maybe_token {
                 // Consumed our lexeme, advance offset
-                println!("consumed token lexeme \"{}\"", token.lexeme);
                 self.current.start = self.current.end;
                 return Some(Ok(token));
             }

@@ -1,5 +1,7 @@
 use std::ops::Range;
 
+use anyhow::anyhow;
+
 #[derive(Default, Debug)]
 pub struct Location {
     pub line: usize,
@@ -31,5 +33,17 @@ impl Error {
             loc: Location { line, col },
             message,
         }
+    }
+}
+
+impl From<Error> for anyhow::Error {
+    fn from(e: Error) -> Self {
+        anyhow!(
+            "{} at line {} columns {}..{}",
+            e.message,
+            e.loc.line,
+            e.loc.col.start,
+            e.loc.col.end
+        )
     }
 }

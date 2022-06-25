@@ -49,6 +49,11 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn error(&self, message: String) -> error::Error {
+        let scanner = &self.state.borrow().scanner;
+        error::Error::with_col(scanner.line, scanner.current.clone(), message)
+    }
+
     fn advance(&self) -> anyhow::Result<(), error::Error> {
         let mut current = self.state.borrow_mut().current.take();
         self.state.borrow_mut().prev = current.take();
@@ -60,23 +65,31 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn matches(&self, types: &[TokenType]) -> bool {
+    fn matches(&self, types: &[TokenType]) -> anyhow::Result<bool, error::Error> {
         for token_type in types {
             if self.check(*token_type) {
-                self.advance();
-                return true;
+                self.advance()?;
+                return Ok(true);
             }
         }
-        false
+        Ok(false)
     }
 
-    fn consume(&self, token_type: TokenType, message: &str) {
+    fn consume(&self, token_type: TokenType, message: &str) -> anyhow::Result<(), error::Error> {
         if self.check(token_type) {
-            self.advance();
-            return;
+            return self.advance();
         }
-        panic!("expected to find type {:?} {}", token_type, message);
+        Err(self.error(format!(
+            "expected to find type {:?} {}",
+            token_type, message
+        )))
     }
+
+    /*
+    fn synchronize(&self) {
+        self.advance()
+    }
+    */
 
     // expression → equality ;
     fn expression(&self) -> ParseResult<'a> {
@@ -87,7 +100,7 @@ impl<'a> Parser<'a> {
     fn equality(&self) -> ParseResult<'a> {
         let mut expr = self.comparison()?;
 
-        while self.matches(&[TokenType::BangEqual, TokenType::EqualEqual]) {
+        while self.matches(&[TokenType::BangEqual, TokenType::EqualEqual])? {
             let operator = self.previous();
             let right = self.comparison()?;
             expr = Box::new(ast::Expr::Binary(ast::BinaryExpr {
@@ -109,7 +122,7 @@ impl<'a> Parser<'a> {
             TokenType::GreaterEqual,
             TokenType::Less,
             TokenType::LessEqual,
-        ]) {
+        ])? {
             let operator = self.previous();
             let right = self.term()?;
             expr = Box::new(ast::Expr::Binary(ast::BinaryExpr {
@@ -126,7 +139,7 @@ impl<'a> Parser<'a> {
     fn term(&self) -> ParseResult<'a> {
         let mut expr = self.factor()?;
 
-        while self.matches(&[TokenType::Minus, TokenType::Plus]) {
+        while self.matches(&[TokenType::Minus, TokenType::Plus])? {
             let operator = self.previous();
             let right = self.factor()?;
             expr = Box::new(ast::Expr::Binary(ast::BinaryExpr {
@@ -143,7 +156,7 @@ impl<'a> Parser<'a> {
     fn factor(&self) -> ParseResult<'a> {
         let mut expr = self.unary()?;
 
-        while self.matches(&[TokenType::Slash, TokenType::Star]) {
+        while self.matches(&[TokenType::Slash, TokenType::Star])? {
             let operator = self.previous();
             let right = self.unary()?;
             expr = Box::new(ast::Expr::Binary(ast::BinaryExpr {
@@ -158,7 +171,7 @@ impl<'a> Parser<'a> {
 
     // unary → ( "!" | "-" ) unary | primary ;
     fn unary(&self) -> ParseResult<'a> {
-        if self.matches(&[TokenType::Plus, TokenType::Minus]) {
+        if self.matches(&[TokenType::Plus, TokenType::Minus])? {
             let operator = self.previous();
             let right = self.unary()?;
             return Ok(Box::new(ast::Expr::Unary(ast::UnaryExpr {
@@ -171,31 +184,26 @@ impl<'a> Parser<'a> {
 
     // primary → NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" ;
     fn primary(&self) -> ParseResult<'a> {
-        if self.matches(&[TokenType::Number, TokenType::String]) {
+        if self.matches(&[TokenType::Number, TokenType::String])? {
             return Ok(Box::new(ast::Expr::Literal(
                 self.previous().unwrap().value.unwrap(),
             )));
         }
-        if self.matches(&[TokenType::True]) {
+        if self.matches(&[TokenType::True])? {
             return Ok(Box::new(ast::Expr::Literal(TokenValue::Bool(true))));
         }
-        if self.matches(&[TokenType::False]) {
+        if self.matches(&[TokenType::False])? {
             return Ok(Box::new(ast::Expr::Literal(TokenValue::Bool(false))));
         }
-        if self.matches(&[TokenType::Nil]) {
+        if self.matches(&[TokenType::Nil])? {
             return Ok(Box::new(ast::Expr::Literal(TokenValue::Nil)));
         }
-        if self.matches(&[TokenType::LeftParen]) {
+        if self.matches(&[TokenType::LeftParen])? {
             let expr = self.expression()?;
-            self.consume(TokenType::RightParen, "Expect ')' after expression.");
+            self.consume(TokenType::RightParen, "Expect ')' after expression.")?;
             return Ok(Box::new(ast::Expr::Grouping(expr)));
         }
-        let scanner = &self.state.borrow().scanner;
-        Err(error::Error::with_col(
-            scanner.line,
-            scanner.current.clone(),
-            "expected expression".to_string(),
-        ))
+        Err(self.error("expected expression".to_string()))
     }
 }
 
