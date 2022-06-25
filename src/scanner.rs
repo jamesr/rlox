@@ -1,6 +1,6 @@
 use core::fmt;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum TokenType {
     // Single-character tokens.
     LeftParen,
@@ -49,12 +49,15 @@ pub enum TokenType {
     While,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum TokenValue<'a> {
     String(&'a str),
     Number(f64),
+    Bool(bool),
+    Nil,
 }
 
+#[derive(Copy, Clone)]
 pub struct Token<'a> {
     pub token_type: TokenType,
     pub lexeme: &'a str,

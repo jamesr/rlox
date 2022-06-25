@@ -3,7 +3,10 @@ use std::sync::Mutex;
 use std::{env, io};
 use std::{fs::File, io::Read, io::Write};
 
+use crate::ast::Visitor;
+
 pub mod ast;
+pub mod parser;
 pub mod scanner;
 
 lazy_static! {
@@ -11,13 +14,11 @@ lazy_static! {
 }
 
 fn run(source: &str) -> anyhow::Result<()> {
-    let scanner = scanner::Scanner::new(source);
-    for token in scanner {
-        match token {
-            Ok(token) => println!("{}", token),
-            Err((line, message)) => error(line, &message),
-        }
-    }
+    let mut scanner = scanner::Scanner::new(source);
+    let parser = parser::Parser::new(&mut scanner);
+    let expr = parser.parse();
+    let mut printer = ast::AstPrinter {};
+    println!("{}", printer.visit_expr(&expr));
     Ok(())
 }
 

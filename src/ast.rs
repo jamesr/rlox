@@ -12,9 +12,9 @@ pub struct UnaryExpr<'a> {
 }
 
 pub struct BinaryExpr<'a> {
-    left: Box<Expr<'a>>,
-    operator: Token<'a>,
-    right: Box<Expr<'a>>,
+    pub left: Box<Expr<'a>>,
+    pub operator: Token<'a>,
+    pub right: Box<Expr<'a>>,
 }
 
 pub trait Visitor<T> {
@@ -23,12 +23,14 @@ pub trait Visitor<T> {
     fn visit_expr(&mut self, e: &Expr) -> T;
 }
 
-struct AstPrinter;
+pub struct AstPrinter;
 impl Visitor<String> for AstPrinter {
     fn visit_literal(&mut self, v: &scanner::TokenValue) -> String {
         match v {
             TokenValue::String(s) => s.to_string(),
             TokenValue::Number(n) => n.to_string(),
+            TokenValue::Bool(b) => b.to_string(),
+            TokenValue::Nil => "nil".to_string(),
         }
     }
 
