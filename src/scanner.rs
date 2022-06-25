@@ -138,19 +138,17 @@ impl<'a> Scanner<'a> {
     }
 
     fn string(&mut self) -> anyhow::Result<Token<'a>, (usize, String)> {
-        loop {
-            match self.peek() {
-                Some('"') => break,
-                None => break,
-                Some('\n') => {
-                    self.line += 1;
-                    self.advance();
-                }
-                _ => {
-                    self.advance();
-                }
+        let mut line = 0;
+        self.advance_matching(|o| match o {
+            Some('"') | None => false,
+            Some('\n') => {
+                line += 1;
+                true
             }
-        }
+            _ => true,
+        });
+        self.line += line;
+
         if self.at_end() {
             return Err((self.line, "Unterminated string.".to_string()));
         }
@@ -166,30 +164,34 @@ impl<'a> Scanner<'a> {
         })
     }
 
-    fn number(&mut self) -> anyhow::Result<Token<'a>, (usize, String)> {
+    fn advance_matching<T>(&mut self, mut pred: T)
+    where
+        T: FnMut(Option<char>) -> bool,
+    {
         loop {
-            if let Some(c) = self.peek() {
-                if c.is_digit(10) {
-                    self.advance();
-                    continue;
-                }
+            if pred(self.peek()) {
+                self.advance();
+                continue;
             }
             break;
         }
+    }
+
+    fn number(&mut self) -> anyhow::Result<Token<'a>, (usize, String)> {
+        fn advance_digits(scanner: &mut Scanner) {
+            scanner.advance_matching(|o| match o {
+                Some(c) => c.is_digit(10),
+                _ => false,
+            })
+        }
+
+        advance_digits(self);
 
         if self.peek() == Some('.') {
             if let Some(next) = self.peek_next() {
                 if next.is_digit(10) {
                     self.advance(); // consume .
-                    loop {
-                        if let Some(c) = self.peek() {
-                            if c.is_digit(10) {
-                                self.advance();
-                                continue;
-                            }
-                        }
-                        break;
-                    }
+                    advance_digits(self);
                 }
             }
         }
@@ -211,15 +213,12 @@ impl<'a> Scanner<'a> {
     }
 
     fn identifier(&mut self) -> anyhow::Result<Token<'a>, (usize, String)> {
-        loop {
-            if let Some(c) = self.peek() {
-                if c.is_ascii_alphanumeric() || c == '_' {
-                    self.advance();
-                    continue;
-                }
-            }
-            break;
-        }
+        self.advance_matching(|c| match c {
+            Some('_') => true,
+            Some(c) => c.is_ascii_alphanumeric(),
+            _ => false,
+        });
+
         let lexeme = self.current();
         use TokenType::*;
         let token_type = match lexeme {
@@ -266,87 +265,89 @@ impl<'a> Iterator for Scanner<'a> {
         use TokenType::*;
         loop {
             self.start = self.current;
-            let maybe_token = match self.advance() {
-                None => return None,
-                Some('(') => Some(self.make_token(LeftParen)),
-                Some(')') => Some(self.make_token(RightParen)),
-                Some('{') => Some(self.make_token(LeftBrace)),
-                Some('}') => Some(self.make_token(RightBrace)),
-                Some(',') => Some(self.make_token(Comma)),
-                Some('.') => Some(self.make_token(Dot)),
-                Some('-') => Some(self.make_token(Minus)),
-                Some('+') => Some(self.make_token(Plus)),
-                Some(';') => Some(self.make_token(Semicolon)),
-                Some('*') => Some(self.make_token(Star)),
-                Some('!') => {
-                    let token_type = if self.matches('=') { BangEqual } else { Bang };
-                    Some(self.make_token(token_type))
-                }
-                Some('=') => {
-                    let token_type = if self.matches('=') { EqualEqual } else { Equal };
-                    Some(self.make_token(token_type))
-                }
-                Some('<') => {
-                    let token_type = if self.matches('=') { LessEqual } else { Less };
-                    Some(self.make_token(token_type))
-                }
-                Some('>') => {
-                    let token_type = if self.matches('=') {
-                        GreaterEqual
-                    } else {
-                        Greater
-                    };
-                    Some(self.make_token(token_type))
-                }
-                Some('/') => {
-                    if self.matches('/') {
-                        // line comment
-                        // peek() until we see a '\n' and then bail.
-                        loop {
-                            match self.peek() {
-                                Some('\n') => break,
-                                None => return None,
-                                _ => {
-                                    self.advance();
+            let maybe_token = if let Some(c) = self.advance() {
+                match c {
+                    '(' => Some(self.make_token(LeftParen)),
+                    ')' => Some(self.make_token(RightParen)),
+                    '{' => Some(self.make_token(LeftBrace)),
+                    '}' => Some(self.make_token(RightBrace)),
+                    ',' => Some(self.make_token(Comma)),
+                    '.' => Some(self.make_token(Dot)),
+                    '-' => Some(self.make_token(Minus)),
+                    '+' => Some(self.make_token(Plus)),
+                    ';' => Some(self.make_token(Semicolon)),
+                    '*' => Some(self.make_token(Star)),
+                    '!' => {
+                        let token_type = if self.matches('=') { BangEqual } else { Bang };
+                        Some(self.make_token(token_type))
+                    }
+                    '=' => {
+                        let token_type = if self.matches('=') { EqualEqual } else { Equal };
+                        Some(self.make_token(token_type))
+                    }
+                    '<' => {
+                        let token_type = if self.matches('=') { LessEqual } else { Less };
+                        Some(self.make_token(token_type))
+                    }
+                    '>' => {
+                        let token_type = if self.matches('=') {
+                            GreaterEqual
+                        } else {
+                            Greater
+                        };
+                        Some(self.make_token(token_type))
+                    }
+                    '/' => {
+                        if self.matches('/') {
+                            // line comment
+                            // peek() until we see a '\n' and then bail.
+                            loop {
+                                match self.peek() {
+                                    Some('\n') => break,
+                                    None => return None,
+                                    _ => {
+                                        self.advance();
+                                    }
                                 }
                             }
+                            None
+                        } else {
+                            Some(self.make_token(Slash))
                         }
+                    }
+
+                    '"' => match self.string() {
+                        Ok(token) => Some(token),
+                        Err(e) => return Some(Err(e)),
+                    },
+
+                    // Skip whitespace
+                    ' ' | '\r' | '\t' => None,
+
+                    '\n' => {
+                        self.line += 1;
                         None
-                    } else {
-                        Some(self.make_token(Slash))
+                    }
+
+                    c => {
+                        if c.is_digit(10) {
+                            match self.number() {
+                                Ok(token) => Some(token),
+                                Err(e) => return Some(Err(e)),
+                            }
+                        } else if c.is_ascii_alphabetic() || c == '_' {
+                            match self.identifier() {
+                                Ok(token) => Some(token),
+                                Err(e) => return Some(Err(e)),
+                            }
+                        } else {
+                            self.start = self.current;
+                            return Some(Err((self.line, format!("unexpected character '{}'", c))));
+                        }
                     }
                 }
-
-                Some('"') => match self.string() {
-                    Ok(token) => Some(token),
-                    Err(e) => return Some(Err(e)),
-                },
-
-                // Skip whitespace
-                Some(' ') => None,
-                Some('\r') => None,
-                Some('\t') => None,
-                Some('\n') => {
-                    self.line += 1;
-                    None
-                }
-
-                Some(c) => {
-                    if c.is_digit(10) {
-                        match self.number() {
-                            Ok(token) => Some(token),
-                            Err(e) => return Some(Err(e)),
-                        }
-                    } else if c.is_ascii_alphabetic() || c == '_' {
-                        match self.identifier() {
-                            Ok(token) => Some(token),
-                            Err(e) => return Some(Err(e)),
-                        }
-                    } else {
-                        self.start = self.current;
-                        return Some(Err((self.line, format!("unexpected character '{}'", c))));
-                    }
-                }
+            } else {
+                return None;
             };
             if let Some(token) = maybe_token {
                 // Consumed our lexeme, advance offset
