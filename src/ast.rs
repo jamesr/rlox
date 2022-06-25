@@ -1,39 +1,30 @@
-use crate::scanner::{self, TokenValue};
-
-mod ast {
-    use crate::scanner::{Token, TokenValue};
-    pub enum Expr<'a> {
-        Binary(BinaryExpr<'a>),
-        Grouping(Box<Expr<'a>>),
-        Literal(TokenValue<'a>),
-        Unary(UnaryExpr<'a>),
-    }
-
-    pub struct UnaryExpr<'a> {
-        pub operator: Token<'a>,
-        pub right: Box<Expr<'a>>,
-    }
-
-    pub struct BinaryExpr<'a> {
-        pub left: Box<Expr<'a>>,
-        pub operator: Token<'a>,
-        pub right: Box<Expr<'a>>,
-    }
+use crate::scanner::{self, Token, TokenValue};
+pub enum Expr<'a> {
+    Binary(BinaryExpr<'a>),
+    Grouping(Box<Expr<'a>>),
+    Literal(TokenValue<'a>),
+    Unary(UnaryExpr<'a>),
 }
 
-mod visit {
-    use crate::ast::ast;
-    use crate::scanner;
+pub struct UnaryExpr<'a> {
+    pub operator: Token<'a>,
+    pub right: Box<Expr<'a>>,
+}
 
-    pub trait Visitor<T> {
-        fn visit_literal(&mut self, v: &scanner::TokenValue) -> T;
-        fn visit_token(&mut self, t: &scanner::Token) -> T;
-        fn visit_expr(&mut self, e: &ast::Expr) -> T;
-    }
+pub struct BinaryExpr<'a> {
+    left: Box<Expr<'a>>,
+    operator: Token<'a>,
+    right: Box<Expr<'a>>,
+}
+
+pub trait Visitor<T> {
+    fn visit_literal(&mut self, v: &scanner::TokenValue) -> T;
+    fn visit_token(&mut self, t: &scanner::Token) -> T;
+    fn visit_expr(&mut self, e: &Expr) -> T;
 }
 
 struct AstPrinter;
-impl visit::Visitor<String> for AstPrinter {
+impl Visitor<String> for AstPrinter {
     fn visit_literal(&mut self, v: &scanner::TokenValue) -> String {
         match v {
             TokenValue::String(s) => s.to_string(),
@@ -45,8 +36,8 @@ impl visit::Visitor<String> for AstPrinter {
         t.lexeme.to_string()
     }
 
-    fn visit_expr(&mut self, e: &ast::Expr) -> String {
-        use ast::Expr::*;
+    fn visit_expr(&mut self, e: &Expr) -> String {
+        use Expr::*;
         match e {
             Binary(b) => {
                 format!(
@@ -69,10 +60,8 @@ impl visit::Visitor<String> for AstPrinter {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        ast::{ast::*, visit::Visitor, AstPrinter},
-        scanner::{Token, TokenType, TokenValue},
-    };
+    use crate::ast::*;
+    use crate::scanner::{Token, TokenType, TokenValue};
 
     #[test]
     fn print_binary_expr() {
