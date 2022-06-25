@@ -6,6 +6,7 @@ use std::{fs::File, io::Read, io::Write};
 use crate::ast::Visitor;
 
 pub mod ast;
+pub mod error;
 pub mod parser;
 pub mod scanner;
 
@@ -16,7 +17,7 @@ lazy_static! {
 fn run(source: &str) -> anyhow::Result<()> {
     let mut scanner = scanner::Scanner::new(source);
     let parser = parser::Parser::new(&mut scanner);
-    let expr = parser.parse();
+    let expr = parser.parse().ok().unwrap();
     let mut printer = ast::AstPrinter {};
     println!("{}", printer.visit_expr(&expr));
     Ok(())

@@ -1,4 +1,6 @@
+use crate::error;
 use core::fmt;
+use std::ops::Range;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum TokenType {
@@ -76,18 +78,18 @@ impl<'a> fmt::Display for Token<'a> {
 
 pub struct Scanner<'a> {
     source: &'a str,
-    start: usize,   // byte index into |source|, must be on UTF-8 char boundary
-    current: usize, // byte index into |source|, must be on UTF-8 char boundary
-    line: usize,    // current line
+    pub line: usize,           // current line
+    pub current: Range<usize>, // byte indices into |source|, must be on UTF-8 char boundaries
 }
+
+type ScanResult<'a> = anyhow::Result<Token<'a>, error::Error>;
 
 impl<'a> Scanner<'a> {
     pub fn new(source: &'a str) -> Scanner {
         Scanner {
             source,
-            start: 0,
-            current: 0,
             line: 0,
+            current: (0..0),
         }
     }
 
@@ -96,20 +98,20 @@ impl<'a> Scanner<'a> {
     }
 
     fn current(&self) -> &'a str {
-        self.source.get(self.start..self.current).unwrap()
+        self.source.get(self.current.clone()).unwrap()
     }
 
     fn rest(&self) -> &'a str {
-        self.source.get(self.current..).unwrap()
+        self.source.get(self.current.end..).unwrap()
     }
 
     fn at_end(&self) -> bool {
-        return self.current == self.source.len();
+        return self.current.end == self.source.len();
     }
 
     fn advance(&mut self) -> Option<char> {
         if let Some(c) = self.rest().chars().next() {
-            self.current += c.len_utf8();
+            self.current.end += c.len_utf8();
             return Some(c);
         }
         return None;
@@ -119,7 +121,7 @@ impl<'a> Scanner<'a> {
         match self.rest().chars().next() {
             Some(c) => {
                 if c == expected {
-                    self.current += c.len_utf16();
+                    self.current.end += c.len_utf16();
                     return true;
                 } else {
                     return false;
@@ -137,7 +139,7 @@ impl<'a> Scanner<'a> {
         return self.rest().chars().nth(1);
     }
 
-    fn string(&mut self) -> anyhow::Result<Token<'a>, (usize, String)> {
+    fn string(&mut self) -> ScanResult<'a> {
         let mut line = 0;
         self.advance_matching(|o| match o {
             Some('"') | None => false,
@@ -150,7 +152,11 @@ impl<'a> Scanner<'a> {
         self.line += line;
 
         if self.at_end() {
-            return Err((self.line, "Unterminated string.".to_string()));
+            return Err(error::Error::with_col(
+                self.line,
+                self.current.clone(),
+                "Unterminated string.".to_string(),
+            ));
         }
         self.advance(); // Consume closing "
 
@@ -177,7 +183,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn number(&mut self) -> anyhow::Result<Token<'a>, (usize, String)> {
+    fn number(&mut self) -> ScanResult<'a> {
         fn advance_digits(scanner: &mut Scanner) {
             scanner.advance_matching(|o| match o {
                 Some(c) => c.is_digit(10),
@@ -199,8 +205,9 @@ impl<'a> Scanner<'a> {
         let lexeme = self.current();
         let parsed_value = lexeme.parse::<f64>();
         if !parsed_value.is_ok() {
-            return Err((
+            return Err(error::Error::with_col(
                 self.line,
+                self.current.clone(),
                 format!("Error parsing numeric literal {}", lexeme),
             ));
         }
@@ -212,7 +219,7 @@ impl<'a> Scanner<'a> {
         })
     }
 
-    fn identifier(&mut self) -> anyhow::Result<Token<'a>, (usize, String)> {
+    fn identifier(&mut self) -> ScanResult<'a> {
         self.advance_matching(|c| match c {
             Some('_') => true,
             Some(c) => c.is_ascii_alphanumeric(),
@@ -259,12 +266,12 @@ impl<'a> Scanner<'a> {
 }
 
 impl<'a> Iterator for Scanner<'a> {
-    type Item = anyhow::Result<Token<'a>, (usize, String)>;
+    type Item = ScanResult<'a>;
 
-    fn next(&mut self) -> Option<anyhow::Result<Token<'a>, (usize, String)>> {
+    fn next(&mut self) -> Option<ScanResult<'a>> {
         use TokenType::*;
         loop {
-            self.start = self.current;
+            self.current.start = self.current.end;
             let maybe_token = if let Some(c) = self.advance() {
                 match c {
                     '(' => Some(self.make_token(LeftParen)),
@@ -341,8 +348,12 @@ impl<'a> Iterator for Scanner<'a> {
                                 Err(e) => return Some(Err(e)),
                             }
                         } else {
-                            self.start = self.current;
-                            return Some(Err((self.line, format!("unexpected character '{}'", c))));
+                            self.current.start = self.current.end;
+                            return Some(Err(error::Error::with_col(
+                                self.line,
+                                self.current.clone(),
+                                format!("unexpected character '{}'", c),
+                            )));
                         }
                     }
                 }
@@ -351,7 +362,8 @@ impl<'a> Iterator for Scanner<'a> {
             };
             if let Some(token) = maybe_token {
                 // Consumed our lexeme, advance offset
-                self.start = self.current;
+                println!("consumed token lexeme \"{}\"", token.lexeme);
+                self.current.start = self.current.end;
                 return Some(Ok(token));
             }
         }
@@ -383,10 +395,12 @@ mod tests {
                     let result = tokens[i].as_ref();
                     assert!(
                         result.is_ok(),
-                        "token {} is an error \"{}\" on line {}",
+                        "token {} is an error \"{}\" on line {} columns {}..{}",
                         i,
-                        result.err().unwrap().1,
-                        result.err().unwrap().0
+                        result.err().unwrap().message,
+                        result.err().unwrap().loc.line,
+                        result.err().unwrap().loc.col.start,
+                        result.err().unwrap().loc.col.end,
                     );
                     let token = result.ok().unwrap();
                     assert_eq!(token.token_type, expected_tokens[i].token_type);
