@@ -1,4 +1,6 @@
 use crate::scanner::{self, Token, TokenValue};
+
+#[derive(PartialEq, Debug)]
 pub enum Expr<'a> {
     Binary(BinaryExpr<'a>),
     Grouping(Box<Expr<'a>>),
@@ -6,11 +8,13 @@ pub enum Expr<'a> {
     Unary(UnaryExpr<'a>),
 }
 
+#[derive(PartialEq, Debug)]
 pub struct UnaryExpr<'a> {
     pub operator: Token<'a>,
     pub right: Box<Expr<'a>>,
 }
 
+#[derive(PartialEq, Debug)]
 pub struct BinaryExpr<'a> {
     pub left: Box<Expr<'a>>,
     pub operator: Token<'a>,
@@ -19,8 +23,18 @@ pub struct BinaryExpr<'a> {
 
 pub trait Visitor<T> {
     fn visit_literal(&mut self, v: &scanner::TokenValue) -> T;
-    fn visit_token(&mut self, t: &scanner::Token) -> T;
-    fn visit_expr(&mut self, e: &Expr) -> T;
+    fn visit_expr(&mut self, e: &Expr) -> T {
+        use Expr::*;
+        match e {
+            Binary(b) => self.visit_binary_expr(b),
+            Grouping(g) => self.visit_grouping_expr(g),
+            Literal(l) => self.visit_literal(l),
+            Unary(u) => self.visit_unary_expr(u),
+        }
+    }
+    fn visit_binary_expr(&mut self, e: &BinaryExpr) -> T;
+    fn visit_grouping_expr(&mut self, e: &Expr) -> T;
+    fn visit_unary_expr(&mut self, e: &UnaryExpr) -> T;
 }
 
 pub struct AstPrinter;
@@ -34,29 +48,21 @@ impl Visitor<String> for AstPrinter {
         }
     }
 
-    fn visit_token(&mut self, t: &scanner::Token) -> String {
-        t.lexeme.to_string()
+    fn visit_binary_expr(&mut self, b: &BinaryExpr) -> String {
+        format!(
+            "( {} {} {} )",
+            self.visit_expr(&*b.left),
+            b.operator.lexeme,
+            self.visit_expr(&*b.right)
+        )
     }
 
-    fn visit_expr(&mut self, e: &Expr) -> String {
-        use Expr::*;
-        match e {
-            Binary(b) => {
-                format!(
-                    "( {} {} {} )",
-                    self.visit_expr(&*b.left),
-                    self.visit_token(&b.operator),
-                    self.visit_expr(&*b.right)
-                )
-            }
-            Grouping(e) => format!("group ( {} )", self.visit_expr(&*e)),
-            Literal(v) => self.visit_literal(v),
-            Unary(u) => format!(
-                "( {} {} )",
-                self.visit_token(&u.operator),
-                self.visit_expr(&*u.right)
-            ),
-        }
+    fn visit_grouping_expr(&mut self, e: &Expr) -> String {
+        format!("group ( {} )", self.visit_expr(&*e))
+    }
+
+    fn visit_unary_expr(&mut self, u: &UnaryExpr) -> String {
+        format!("( {} {} )", u.operator.lexeme, self.visit_expr(&*u.right))
     }
 }
 

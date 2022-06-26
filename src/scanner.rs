@@ -51,7 +51,7 @@ pub enum TokenType {
     While,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(PartialEq, Debug, Copy, Clone)]
 pub enum TokenValue<'a> {
     String(&'a str),
     Number(f64),
@@ -59,7 +59,7 @@ pub enum TokenValue<'a> {
     Nil,
 }
 
-#[derive(Copy, Clone)]
+#[derive(PartialEq, Debug, Copy, Clone)]
 pub struct Token<'a> {
     pub token_type: TokenType,
     pub lexeme: &'a str,

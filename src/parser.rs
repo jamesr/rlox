@@ -4,7 +4,7 @@ use crate::scanner::{Scanner, Token, TokenType, TokenValue};
 use crate::{ast, error};
 
 struct ParserState<'a> {
-    scanner: &'a mut Scanner<'a>,
+    scanner: Scanner<'a>,
     current: Option<Token<'a>>,
     prev: Option<Token<'a>>,
 }
@@ -15,7 +15,7 @@ pub struct Parser<'a> {
 type ParseResult<'a> = anyhow::Result<Box<ast::Expr<'a>>, error::Error>;
 
 impl<'a> Parser<'a> {
-    pub fn new(scanner: &'a mut Scanner<'a>) -> Parser<'a> {
+    pub fn new(scanner: Scanner<'a>) -> Parser<'a> {
         Parser {
             state: RefCell::new(ParserState {
                 scanner,
@@ -171,7 +171,7 @@ impl<'a> Parser<'a> {
 
     // unary → ( "!" | "-" ) unary | primary ;
     fn unary(&self) -> ParseResult<'a> {
-        if self.matches(&[TokenType::Plus, TokenType::Minus])? {
+        if self.matches(&[TokenType::Bang, TokenType::Minus])? {
             let operator = self.previous();
             let right = self.unary()?;
             return Ok(Box::new(ast::Expr::Unary(ast::UnaryExpr {
@@ -207,23 +207,69 @@ impl<'a> Parser<'a> {
     }
 }
 
+pub fn parse_string<'a>(source: &str) -> ParseResult {
+    let scanner = Scanner::new(source);
+    let parser = Parser::new(scanner);
+    parser.parse()
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::scanner::Scanner;
+    use crate::ast::UnaryExpr;
+    use crate::parser::parse_string;
+    use crate::scanner::{Token, TokenType, TokenValue};
     use crate::{ast, error};
 
-    use super::Parser;
-
     #[test]
-    fn parse_comparison() -> Result<(), error::Error> {
-        let source = "0 == 2";
-        let mut scanner = Scanner::new(source);
-        let parser = Parser::new(&mut scanner);
-        let expr = parser.parse()?;
+    fn comparison() -> Result<(), error::Error> {
+        let expr = parse_string("0 == 2")?;
         assert!(matches!(*expr, ast::Expr::Binary { .. }));
         if let ast::Expr::Binary(b) = *expr {
             assert!(matches!(*b.left, ast::Expr::Literal { .. }));
         }
+        Ok(())
+    }
+
+    #[test]
+    fn literal() -> Result<(), error::Error> {
+        let false_literal = parse_string("false")?;
+        assert_eq!(*false_literal, ast::Expr::Literal(TokenValue::Bool(false)));
+
+        let true_literal = parse_string("true")?;
+        assert_eq!(*true_literal, ast::Expr::Literal(TokenValue::Bool(true)));
+
+        Ok(())
+    }
+
+    #[test]
+    fn unary() -> Result<(), error::Error> {
+        let unary_minus = parse_string("- 5")?;
+        assert_eq!(
+            *unary_minus,
+            ast::Expr::Unary(UnaryExpr {
+                operator: Token {
+                    token_type: TokenType::Minus,
+                    lexeme: "-",
+                    value: None,
+                    line: 0,
+                },
+                right: Box::new(ast::Expr::Literal(TokenValue::Number(5.0))),
+            })
+        );
+
+        let unary_negate = parse_string("!false")?;
+        assert_eq!(
+            *unary_negate,
+            ast::Expr::Unary(UnaryExpr {
+                operator: Token {
+                    token_type: TokenType::Bang,
+                    lexeme: "!",
+                    value: None,
+                    line: 0,
+                },
+                right: Box::new(ast::Expr::Literal(TokenValue::Bool(false))),
+            })
+        );
         Ok(())
     }
 }

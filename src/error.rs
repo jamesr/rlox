@@ -47,3 +47,21 @@ impl From<Error> for anyhow::Error {
         )
     }
 }
+
+impl From<String> for Error {
+    fn from(message: String) -> Self {
+        Error {
+            loc: Location::default(),
+            message,
+        }
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(e: std::io::Error) -> Self {
+        Error {
+            loc: Location::default(),
+            message: format!("I/O error {}", e.to_string()),
+        }
+    }
+}
