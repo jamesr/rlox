@@ -33,7 +33,13 @@ impl Interpreter {
         Interpreter {}
     }
 
-    pub fn interpret(&mut self, e: &ast::Expr) -> InterpreterResult {
+    pub fn interpret<'a>(&mut self, stmts: Vec<Box<ast::Stmt<'a>>>) {
+        for s in stmts {
+            self.visit_stmt(&*s)
+        }
+    }
+
+    pub fn interpret_expr(&mut self, e: &ast::Expr) -> InterpreterResult {
         self.visit_expr(e)
     }
 }
@@ -119,11 +125,16 @@ impl ast::Visitor<InterpreterResult> for Interpreter {
             _ => Err("unsupported unary operator".to_string()),
         }
     }
+
+    fn visit_print_stmt(&mut self, e: &ast::Expr) {
+        // XXX propagate error
+        println!("{}", self.interpret_expr(e).unwrap());
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{error, eval::Value, parser::parse_string};
+    use crate::{error, eval::Value, parser::parse_expression};
 
     use super::Interpreter;
 
@@ -133,8 +144,8 @@ mod tests {
             fn $name() -> anyhow::Result<(), error::Error> {
                 let mut interpreter = Interpreter::new();
 
-                let expr = parse_string($source)?;
-                assert_eq!(interpreter.interpret(&expr)?, $expected_value);
+                let expr = parse_expression($source)?;
+                assert_eq!(interpreter.interpret_expr(&expr)?, $expected_value);
                 Ok(())
             }
         };

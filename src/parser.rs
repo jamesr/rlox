@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 
+use crate::ast::Stmt;
 use crate::scanner::{Scanner, Token, TokenType, TokenValue};
 use crate::{ast, error};
 
@@ -12,7 +13,8 @@ pub struct Parser<'a> {
     state: RefCell<ParserState<'a>>,
 }
 
-type ParseResult<'a> = anyhow::Result<Box<ast::Expr<'a>>, error::Error>;
+type ExprResult<'a> = anyhow::Result<Box<ast::Expr<'a>>, error::Error>;
+type StmtResult<'a> = anyhow::Result<Box<ast::Stmt<'a>>, error::Error>;
 
 impl<'a> Parser<'a> {
     pub fn new(scanner: Scanner<'a>) -> Parser<'a> {
@@ -25,17 +27,39 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse(&self) -> ParseResult<'a> {
+    pub fn parse_expression(&mut self) -> ExprResult<'a> {
+        self.prime()?;
+        self.expression()
+    }
+
+    // program → statement* EOF ;
+    pub fn parse(&mut self) -> anyhow::Result<Vec<Box<ast::Stmt<'a>>>, error::Error> {
+        self.prime()?;
+
+        let mut statements = Vec::new();
+
+        while !self.at_end() {
+            statements.push(self.statement()?);
+        }
+
+        Ok(statements)
+    }
+
+    fn prime(&self) -> anyhow::Result<(), error::Error> {
         let first = match self.state.borrow_mut().scanner.next() {
             Some(result) => result,
             None => return Err(error::Error::new("Expected expression".to_string())),
         };
         self.state.borrow_mut().current = Some(first?);
-        self.expression()
+        Ok(())
     }
 
     fn peek(&self) -> Option<Token<'a>> {
         self.state.borrow().current
+    }
+
+    fn at_end(&self) -> bool {
+        self.state.borrow().current.is_none()
     }
 
     fn previous(&self) -> Option<Token<'a>> {
@@ -92,12 +116,12 @@ impl<'a> Parser<'a> {
     */
 
     // expression → equality ;
-    fn expression(&self) -> ParseResult<'a> {
+    fn expression(&self) -> ExprResult<'a> {
         self.equality()
     }
 
     // equality → comparison ( ( "!=" | "==" ) comparison )* ;
-    fn equality(&self) -> ParseResult<'a> {
+    fn equality(&self) -> ExprResult<'a> {
         let mut expr = self.comparison()?;
 
         while self.matches(&[TokenType::BangEqual, TokenType::EqualEqual])? {
@@ -114,7 +138,7 @@ impl<'a> Parser<'a> {
     }
 
     // comparison → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
-    fn comparison(&self) -> ParseResult<'a> {
+    fn comparison(&self) -> ExprResult<'a> {
         let mut expr = self.term()?;
 
         while self.matches(&[
@@ -136,7 +160,7 @@ impl<'a> Parser<'a> {
     }
 
     // term → factor ( ( "-" | "+" ) factor )* ;
-    fn term(&self) -> ParseResult<'a> {
+    fn term(&self) -> ExprResult<'a> {
         let mut expr = self.factor()?;
 
         while self.matches(&[TokenType::Minus, TokenType::Plus])? {
@@ -153,7 +177,7 @@ impl<'a> Parser<'a> {
     }
 
     // factor → unary ( ( "/" | "*" ) unary )* ;
-    fn factor(&self) -> ParseResult<'a> {
+    fn factor(&self) -> ExprResult<'a> {
         let mut expr = self.unary()?;
 
         while self.matches(&[TokenType::Slash, TokenType::Star])? {
@@ -170,7 +194,7 @@ impl<'a> Parser<'a> {
     }
 
     // unary → ( "!" | "-" ) unary | primary ;
-    fn unary(&self) -> ParseResult<'a> {
+    fn unary(&self) -> ExprResult<'a> {
         if self.matches(&[TokenType::Bang, TokenType::Minus])? {
             let operator = self.previous();
             let right = self.unary()?;
@@ -183,7 +207,7 @@ impl<'a> Parser<'a> {
     }
 
     // primary → NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" ;
-    fn primary(&self) -> ParseResult<'a> {
+    fn primary(&self) -> ExprResult<'a> {
         if self.matches(&[TokenType::Number, TokenType::String])? {
             return Ok(Box::new(ast::Expr::Literal(
                 self.previous().unwrap().value.unwrap(),
@@ -205,24 +229,53 @@ impl<'a> Parser<'a> {
         }
         Err(self.error("expected expression".to_string()))
     }
+
+    // statement → exprStmt | printStmt ;
+    fn statement(&mut self) -> StmtResult<'a> {
+        if self.matches(&[TokenType::Print])? {
+            return self.print_stmt();
+        }
+
+        self.expr_stmt()
+    }
+
+    // exprStmt       → expression ";" ;
+    fn expr_stmt(&mut self) -> StmtResult<'a> {
+        let expr = self.expression()?;
+        self.consume(TokenType::Semicolon, "Expect ';' after value.")?;
+        Ok(Box::new(ast::Stmt::Expr(expr)))
+    }
+
+    // printStmt      → "print" expression ";"
+    fn print_stmt(&mut self) -> StmtResult<'a> {
+        let expr = self.expression()?;
+        self.consume(TokenType::Semicolon, "Expect ';' after value.")?;
+        Ok(Box::new(ast::Stmt::Print(expr)))
+    }
 }
 
-pub fn parse_string<'a>(source: &str) -> ParseResult {
+pub fn parse<'a>(source: &'a str) -> anyhow::Result<Vec<Box<Stmt<'a>>>, error::Error> {
     let scanner = Scanner::new(source);
-    let parser = Parser::new(scanner);
+    let mut parser = Parser::new(scanner);
     parser.parse()
+}
+
+pub fn parse_expression<'a>(source: &str) -> ExprResult {
+    let scanner = Scanner::new(source);
+    let mut parser = Parser::new(scanner);
+    parser.parse_expression()
 }
 
 #[cfg(test)]
 mod tests {
     use crate::ast::UnaryExpr;
-    use crate::parser::parse_string;
+    use crate::parser::parse_expression;
     use crate::scanner::{Token, TokenType, TokenValue};
     use crate::{ast, error};
 
     #[test]
     fn comparison() -> Result<(), error::Error> {
-        let expr = parse_string("0 == 2")?;
+        let expr = parse_expression("0 == 2")?;
         assert!(matches!(*expr, ast::Expr::Binary { .. }));
         if let ast::Expr::Binary(b) = *expr {
             assert!(matches!(*b.left, ast::Expr::Literal { .. }));
@@ -232,10 +285,10 @@ mod tests {
 
     #[test]
     fn literal() -> Result<(), error::Error> {
-        let false_literal = parse_string("false")?;
+        let false_literal = parse_expression("false")?;
         assert_eq!(*false_literal, ast::Expr::Literal(TokenValue::Bool(false)));
 
-        let true_literal = parse_string("true")?;
+        let true_literal = parse_expression("true")?;
         assert_eq!(*true_literal, ast::Expr::Literal(TokenValue::Bool(true)));
 
         Ok(())
@@ -243,7 +296,7 @@ mod tests {
 
     #[test]
     fn unary() -> Result<(), error::Error> {
-        let unary_minus = parse_string("- 5")?;
+        let unary_minus = parse_expression("- 5")?;
         assert_eq!(
             *unary_minus,
             ast::Expr::Unary(UnaryExpr {
@@ -257,7 +310,7 @@ mod tests {
             })
         );
 
-        let unary_negate = parse_string("!false")?;
+        let unary_negate = parse_expression("!false")?;
         assert_eq!(
             *unary_negate,
             ast::Expr::Unary(UnaryExpr {

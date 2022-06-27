@@ -21,6 +21,13 @@ pub struct BinaryExpr<'a> {
     pub right: Box<Expr<'a>>,
 }
 
+#[derive(PartialEq, Debug)]
+pub enum Stmt<'a> {
+    Expr(Box<Expr<'a>>),
+    Print(Box<Expr<'a>>),
+    Block(Vec<Box<Stmt<'a>>>),
+}
+
 pub trait Visitor<T> {
     fn visit_literal(&mut self, v: &scanner::TokenValue) -> T;
     fn visit_expr(&mut self, e: &Expr) -> T {
@@ -35,6 +42,23 @@ pub trait Visitor<T> {
     fn visit_binary_expr(&mut self, e: &BinaryExpr) -> T;
     fn visit_grouping_expr(&mut self, e: &Expr) -> T;
     fn visit_unary_expr(&mut self, e: &UnaryExpr) -> T;
+
+    fn visit_stmt(&mut self, s: &Stmt) {
+        use Stmt::*;
+        match s {
+            Expr(e) => {
+                self.visit_expr(e);
+            }
+            Print(e) => self.visit_print_stmt(e),
+            Block(v) => {
+                for s in v {
+                    self.visit_stmt(s);
+                }
+            }
+        }
+    }
+
+    fn visit_print_stmt(&mut self, e: &Expr);
 }
 
 pub struct AstPrinter;
@@ -64,6 +88,8 @@ impl Visitor<String> for AstPrinter {
     fn visit_unary_expr(&mut self, u: &UnaryExpr) -> String {
         format!("( {} {} )", u.operator.lexeme, self.visit_expr(&*u.right))
     }
+
+    fn visit_print_stmt(&mut self, _: &Expr) {}
 }
 
 #[cfg(test)]

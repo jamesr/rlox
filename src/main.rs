@@ -1,6 +1,7 @@
 use std::{env, io};
 use std::{fs::File, io::Read, io::Write};
 
+use ast::Visitor;
 use eval::Interpreter;
 
 pub mod ast;
@@ -10,8 +11,8 @@ pub mod parser;
 pub mod scanner;
 
 fn run(source: &str, interpreter: &mut Interpreter) -> anyhow::Result<(), error::Error> {
-    let expr = parser::parse_string(source)?;
-    println!("{}", interpreter.interpret(&expr)?);
+    let stmts = parser::parse(source)?;
+    interpreter.interpret(stmts);
     Ok(())
 }
 
