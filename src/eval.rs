@@ -2,10 +2,11 @@ use std::fmt::Display;
 
 use crate::{
     ast::{self, Visitor},
-    scanner::{self, TokenValue},
+    env,
+    scanner::{self, Token, TokenValue},
 };
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Value {
     String(String),
     Number(f64),
@@ -24,13 +25,17 @@ impl Display for Value {
     }
 }
 
-pub struct Interpreter;
+pub struct Interpreter {
+    env: Box<env::Env>,
+}
 
 type InterpreterResult = anyhow::Result<Value, String>;
 
 impl Interpreter {
     pub fn new() -> Interpreter {
-        Interpreter {}
+        Interpreter {
+            env: Box::new(env::Env::new()),
+        }
     }
 
     pub fn interpret<'a>(&mut self, stmts: Vec<Box<ast::Stmt<'a>>>) {
@@ -126,9 +131,21 @@ impl ast::Visitor<InterpreterResult> for Interpreter {
         }
     }
 
+    fn visit_variable(&mut self, t: &Token) -> InterpreterResult {
+        self.env.get(t.lexeme.to_string())
+    }
+
     fn visit_print_stmt(&mut self, e: &ast::Expr) {
         // XXX propagate error
         println!("{}", self.interpret_expr(e).unwrap());
+    }
+    fn visit_var_decl_stmt(&mut self, v: &ast::VarDecl) {
+        let initial = match &v.initializer {
+            Some(expr) => self.visit_expr(&expr).unwrap(),
+            None => Value::Nil,
+        };
+
+        self.env.define(v.name.lexeme.to_string(), initial);
     }
 }
 
@@ -138,7 +155,7 @@ mod tests {
 
     use super::Interpreter;
 
-    macro_rules! eval_string_test {
+    macro_rules! eval_string_expr_test {
         ($name:ident, $source:expr, $expected_value:expr) => {
             #[test]
             fn $name() -> anyhow::Result<(), error::Error> {
@@ -151,25 +168,40 @@ mod tests {
         };
     }
 
-    eval_string_test!(false_literal, "false", Value::Bool(false));
+    eval_string_expr_test!(false_literal, "false", Value::Bool(false));
 
-    eval_string_test!(true_literal, "true", Value::Bool(true));
+    eval_string_expr_test!(true_literal, "true", Value::Bool(true));
 
-    eval_string_test!(nil_literal, "nil", Value::Nil);
+    eval_string_expr_test!(nil_literal, "nil", Value::Nil);
 
-    eval_string_test!(
+    eval_string_expr_test!(
         string_literal,
         "\"hello\"",
         Value::String("hello".to_string())
     );
 
-    eval_string_test!(number_literal, "-4.2", Value::Number(-4.2));
+    eval_string_expr_test!(number_literal, "-4.2", Value::Number(-4.2));
 
-    eval_string_test!(unary_minus, "-2.0", Value::Number(-2.0));
+    eval_string_expr_test!(unary_minus, "-2.0", Value::Number(-2.0));
 
-    eval_string_test!(unary_negate, "!false", Value::Bool(true));
+    eval_string_expr_test!(unary_negate, "!false", Value::Bool(true));
 
-    eval_string_test!(binary_plus, "4 + 0.3", Value::Number(4.3));
+    eval_string_expr_test!(binary_plus, "4 + 0.3", Value::Number(4.3));
 
-    eval_string_test!(grouping, "! ( false )", Value::Bool(true));
+    eval_string_expr_test!(grouping, "! ( false )", Value::Bool(true));
+
+    macro_rules! eval_string_stmts_test {
+        ($name:ident, $source:expr) => {
+            #[test]
+            fn $name() -> anyhow::Result<(), error::Error> {
+                let mut interpreter = Interpreter::new();
+
+                let stmts = crate::parser::parse($source)?;
+                interpreter.interpret(stmts);
+                Ok(())
+            }
+        };
+    }
+
+    eval_string_stmts_test!(var_decl, "var foo = 3;");
 }

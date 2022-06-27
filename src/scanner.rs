@@ -59,6 +59,17 @@ pub enum TokenValue<'a> {
     Nil,
 }
 
+impl std::fmt::Display for TokenValue<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TokenValue::String(s) => write!(f, "\"{}\"", s),
+            TokenValue::Number(n) => write!(f, "{}", n),
+            TokenValue::Bool(b) => write!(f, "{}", b),
+            TokenValue::Nil => write!(f, "nil"),
+        }
+    }
+}
+
 #[derive(PartialEq, Debug, Copy, Clone)]
 pub struct Token<'a> {
     pub token_type: TokenType,

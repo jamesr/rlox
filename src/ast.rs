@@ -6,6 +6,7 @@ pub enum Expr<'a> {
     Grouping(Box<Expr<'a>>),
     Literal(TokenValue<'a>),
     Unary(UnaryExpr<'a>),
+    Variable(Token<'a>),
 }
 
 #[derive(PartialEq, Debug)]
@@ -26,6 +27,13 @@ pub enum Stmt<'a> {
     Expr(Box<Expr<'a>>),
     Print(Box<Expr<'a>>),
     Block(Vec<Box<Stmt<'a>>>),
+    Var(VarDecl<'a>),
+}
+
+#[derive(PartialEq, Debug)]
+pub struct VarDecl<'a> {
+    pub name: Token<'a>,
+    pub initializer: Option<Box<Expr<'a>>>,
 }
 
 pub trait Visitor<T> {
@@ -37,11 +45,13 @@ pub trait Visitor<T> {
             Grouping(g) => self.visit_grouping_expr(g),
             Literal(l) => self.visit_literal(l),
             Unary(u) => self.visit_unary_expr(u),
+            Variable(t) => self.visit_variable(t),
         }
     }
     fn visit_binary_expr(&mut self, e: &BinaryExpr) -> T;
     fn visit_grouping_expr(&mut self, e: &Expr) -> T;
     fn visit_unary_expr(&mut self, e: &UnaryExpr) -> T;
+    fn visit_variable(&mut self, t: &Token) -> T;
 
     fn visit_stmt(&mut self, s: &Stmt) {
         use Stmt::*;
@@ -55,10 +65,14 @@ pub trait Visitor<T> {
                     self.visit_stmt(s);
                 }
             }
+            Var(v) => {
+                self.visit_var_decl_stmt(v);
+            }
         }
     }
 
     fn visit_print_stmt(&mut self, e: &Expr);
+    fn visit_var_decl_stmt(&mut self, v: &VarDecl);
 }
 
 pub struct AstPrinter;
@@ -89,7 +103,12 @@ impl Visitor<String> for AstPrinter {
         format!("( {} {} )", u.operator.lexeme, self.visit_expr(&*u.right))
     }
 
+    fn visit_variable(&mut self, t: &Token) -> String {
+        format!("variable ( {} )", t.lexeme)
+    }
+
     fn visit_print_stmt(&mut self, _: &Expr) {}
+    fn visit_var_decl_stmt(&mut self, _: &VarDecl) {}
 }
 
 #[cfg(test)]

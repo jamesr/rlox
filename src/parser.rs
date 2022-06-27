@@ -1,6 +1,5 @@
 use std::cell::RefCell;
 
-use crate::ast::Stmt;
 use crate::scanner::{Scanner, Token, TokenType, TokenValue};
 use crate::{ast, error};
 
@@ -15,6 +14,7 @@ pub struct Parser<'a> {
 
 type ExprResult<'a> = anyhow::Result<Box<ast::Expr<'a>>, error::Error>;
 type StmtResult<'a> = anyhow::Result<Box<ast::Stmt<'a>>, error::Error>;
+type StmtsResult<'a> = anyhow::Result<Vec<Box<ast::Stmt<'a>>>, error::Error>;
 
 impl<'a> Parser<'a> {
     pub fn new(scanner: Scanner<'a>) -> Parser<'a> {
@@ -32,17 +32,50 @@ impl<'a> Parser<'a> {
         self.expression()
     }
 
-    // program → statement* EOF ;
-    pub fn parse(&mut self) -> anyhow::Result<Vec<Box<ast::Stmt<'a>>>, error::Error> {
+    pub fn parse(&mut self) -> StmtsResult<'a> {
         self.prime()?;
 
+        self.program()
+    }
+
+    // program → declaration* EOF ;
+    fn program(&self) -> StmtsResult<'a> {
         let mut statements = Vec::new();
 
         while !self.at_end() {
-            statements.push(self.statement()?);
+            statements.push(self.declaration()?);
         }
 
         Ok(statements)
+    }
+
+    // declaration → varDecl | statement ;
+    fn declaration(&self) -> StmtResult<'a> {
+        // TODO - synchronize on errors here
+
+        if self.matches(&[TokenType::Var])? {
+            return self.var_decl();
+        }
+
+        self.statement()
+    }
+
+    // varDecl → "var" IDENTIFIER ( "=" expression )? ";" ;
+    fn var_decl(&self) -> StmtResult<'a> {
+        self.consume(TokenType::Identifier, "Expect variable name.")?;
+        let name = self.previous().unwrap();
+
+        let initializer = if self.matches(&[TokenType::Equal])? {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+
+        self.consume(
+            TokenType::Semicolon,
+            "Expect ';' after variable declaration.",
+        )?;
+        Ok(Box::new(ast::Stmt::Var(ast::VarDecl { name, initializer })))
     }
 
     fn prime(&self) -> anyhow::Result<(), error::Error> {
@@ -206,13 +239,11 @@ impl<'a> Parser<'a> {
         self.primary()
     }
 
-    // primary → NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" ;
+    // primary  → "true" | "false" | "nil"
+    //          | NUMBER | STRING
+    //          | "(" expression ")"
+    //          | IDENTIFIER ;
     fn primary(&self) -> ExprResult<'a> {
-        if self.matches(&[TokenType::Number, TokenType::String])? {
-            return Ok(Box::new(ast::Expr::Literal(
-                self.previous().unwrap().value.unwrap(),
-            )));
-        }
         if self.matches(&[TokenType::True])? {
             return Ok(Box::new(ast::Expr::Literal(TokenValue::Bool(true))));
         }
@@ -222,16 +253,25 @@ impl<'a> Parser<'a> {
         if self.matches(&[TokenType::Nil])? {
             return Ok(Box::new(ast::Expr::Literal(TokenValue::Nil)));
         }
+        if self.matches(&[TokenType::Number, TokenType::String])? {
+            return Ok(Box::new(ast::Expr::Literal(
+                self.previous().unwrap().value.unwrap(),
+            )));
+        }
         if self.matches(&[TokenType::LeftParen])? {
             let expr = self.expression()?;
             self.consume(TokenType::RightParen, "Expect ')' after expression.")?;
             return Ok(Box::new(ast::Expr::Grouping(expr)));
         }
+        if self.matches(&[TokenType::Identifier])? {
+            let token = self.previous().unwrap();
+            return Ok(Box::new(ast::Expr::Variable(token)));
+        }
         Err(self.error("expected expression".to_string()))
     }
 
     // statement → exprStmt | printStmt ;
-    fn statement(&mut self) -> StmtResult<'a> {
+    fn statement(&self) -> StmtResult<'a> {
         if self.matches(&[TokenType::Print])? {
             return self.print_stmt();
         }
@@ -239,22 +279,22 @@ impl<'a> Parser<'a> {
         self.expr_stmt()
     }
 
-    // exprStmt       → expression ";" ;
-    fn expr_stmt(&mut self) -> StmtResult<'a> {
+    // exprStmt → expression ";" ;
+    fn expr_stmt(&self) -> StmtResult<'a> {
         let expr = self.expression()?;
         self.consume(TokenType::Semicolon, "Expect ';' after value.")?;
         Ok(Box::new(ast::Stmt::Expr(expr)))
     }
 
-    // printStmt      → "print" expression ";"
-    fn print_stmt(&mut self) -> StmtResult<'a> {
+    // printStmt → "print" expression ";"
+    fn print_stmt(&self) -> StmtResult<'a> {
         let expr = self.expression()?;
         self.consume(TokenType::Semicolon, "Expect ';' after value.")?;
         Ok(Box::new(ast::Stmt::Print(expr)))
     }
 }
 
-pub fn parse<'a>(source: &'a str) -> anyhow::Result<Vec<Box<Stmt<'a>>>, error::Error> {
+pub fn parse<'a>(source: &'a str) -> StmtsResult<'a> {
     let scanner = Scanner::new(source);
     let mut parser = Parser::new(scanner);
     parser.parse()

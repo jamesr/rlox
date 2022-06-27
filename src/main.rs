@@ -1,10 +1,10 @@
-use std::{env, io};
+use std::io;
 use std::{fs::File, io::Read, io::Write};
 
-use ast::Visitor;
 use eval::Interpreter;
 
 pub mod ast;
+pub mod env;
 pub mod error;
 pub mod eval;
 pub mod parser;
@@ -42,8 +42,8 @@ fn run_prompt() -> anyhow::Result<(), error::Error> {
 }
 
 fn main() {
-    match env::args().len() {
-        2 => run_file(&env::args().nth(1).unwrap()).unwrap(),
+    match std::env::args().len() {
+        2 => run_file(&std::env::args().nth(1).unwrap()).unwrap(),
         1 => run_prompt().unwrap(),
         _ => println!("Usage: rlox [script]"),
     }
