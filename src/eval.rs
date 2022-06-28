@@ -141,6 +141,14 @@ impl ast::Visitor<InterpreterResult> for Interpreter {
         Ok(value)
     }
 
+    fn visit_block(&mut self, v: &Vec<Box<ast::Stmt>>) {
+        self.env.push_block();
+        for s in v {
+            self.visit_stmt(s);
+        }
+        self.env.pop_block();
+    }
+
     fn visit_print_stmt(&mut self, e: &ast::Expr) {
         // XXX propagate error
         println!("{}", self.interpret_expr(e).unwrap());
@@ -200,6 +208,7 @@ mod tests {
         ($name:ident, $source:expr) => {
             #[test]
             fn $name() -> anyhow::Result<(), error::Error> {
+                println!("{}", $source);
                 let mut interpreter = Interpreter::new();
 
                 let stmts = crate::parser::parse($source)?;
@@ -214,4 +223,11 @@ mod tests {
     }
 
     eval_string_stmts_test!(var_decl, "var foo = 3; var all_tests_passed = foo == 3;");
+
+    eval_string_stmts_test!(
+        block,
+        r#"var foo = 3;
+         { var foo = 5; }
+         var all_tests_passed = foo == 3;"#
+    );
 }

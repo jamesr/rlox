@@ -287,13 +287,32 @@ impl<'a> Parser<'a> {
         Err(self.error("expected expression".to_string()))
     }
 
-    // statement → exprStmt | printStmt ;
+    // statement → exprStmt
+    //           | printStmt
+    //           | block ;
     fn statement(&self) -> StmtResult<'a> {
         if self.matches(&[TokenType::Print])? {
             return self.print_stmt();
         }
 
+        if self.matches(&[TokenType::LeftBrace])? {
+            return Ok(Box::new(ast::Stmt::Block(self.block()?)));
+        }
+
         self.expr_stmt()
+    }
+
+    // block → "{" declaration* "}" ;
+    fn block(&self) -> StmtsResult<'a> {
+        let mut stmts = Vec::new();
+
+        while !self.check(TokenType::RightBrace) && !self.at_end() {
+            stmts.push(self.declaration()?);
+        }
+
+        self.consume(TokenType::RightBrace, "Expect ';' after block.")?;
+
+        Ok(stmts)
     }
 
     // exprStmt → expression ";" ;
@@ -327,7 +346,7 @@ pub fn parse_expression<'a>(source: &str) -> ExprResult {
 mod tests {
     use crate::ast::{self, *};
     use crate::error;
-    use crate::parser::parse_expression;
+    use crate::parser::{parse, parse_expression};
     use crate::scanner::*;
 
     #[test]
@@ -398,6 +417,20 @@ mod tests {
                 },
                 value: Box::new(ast::Expr::Literal(TokenValue::Number(3.0))),
             })
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn block() -> anyhow::Result<(), error::Error> {
+        let block = parse("{ 5; }")?;
+
+        assert_eq!(
+            block[0],
+            Box::new(ast::Stmt::Block(vec![Box::new(ast::Stmt::Expr(Box::new(
+                ast::Expr::Literal(TokenValue::Number(5.0))
+            ),))]))
         );
 
         Ok(())

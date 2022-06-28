@@ -69,17 +69,14 @@ pub trait Visitor<T> {
                 self.visit_expr(e);
             }
             Print(e) => self.visit_print_stmt(e),
-            Block(v) => {
-                for s in v {
-                    self.visit_stmt(s);
-                }
-            }
+            Block(v) => self.visit_block(v),
             Var(v) => {
                 self.visit_var_decl_stmt(v);
             }
         }
     }
 
+    fn visit_block(&mut self, v: &Vec<Box<Stmt>>);
     fn visit_print_stmt(&mut self, e: &Expr);
     fn visit_var_decl_stmt(&mut self, v: &VarDecl);
 }
@@ -120,6 +117,7 @@ impl Visitor<String> for AstPrinter {
         format!("assign {} = ( {} )", a.name, self.visit_expr(&a.value))
     }
 
+    fn visit_block(&mut self, _: &Vec<Box<Stmt>>) {}
     fn visit_print_stmt(&mut self, _: &Expr) {}
     fn visit_var_decl_stmt(&mut self, _: &VarDecl) {}
 }
