@@ -135,6 +135,12 @@ impl ast::Visitor<InterpreterResult> for Interpreter {
         self.env.get(t.lexeme.to_string())
     }
 
+    fn visit_assign(&mut self, a: &ast::AssignExpr) -> InterpreterResult {
+        let value = self.visit_expr(&*a.value)?;
+        self.env.assign(a.name.lexeme.to_string(), value.clone())?;
+        Ok(value)
+    }
+
     fn visit_print_stmt(&mut self, e: &ast::Expr) {
         // XXX propagate error
         println!("{}", self.interpret_expr(e).unwrap());
@@ -198,10 +204,14 @@ mod tests {
 
                 let stmts = crate::parser::parse($source)?;
                 interpreter.interpret(stmts);
+
+                let all_tests_passed_expr = crate::parser::parse_expression("all_tests_passed")?;
+                let result = interpreter.interpret_expr(&all_tests_passed_expr)?;
+                assert_eq!(result, Value::Bool(true));
                 Ok(())
             }
         };
     }
 
-    eval_string_stmts_test!(var_decl, "var foo = 3;");
+    eval_string_stmts_test!(var_decl, "var foo = 3; var all_tests_passed = foo == 3;");
 }

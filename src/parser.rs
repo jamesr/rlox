@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 
+use crate::ast::AssignExpr;
 use crate::scanner::{Scanner, Token, TokenType, TokenValue};
 use crate::{ast, error};
 
@@ -148,9 +149,25 @@ impl<'a> Parser<'a> {
     }
     */
 
-    // expression → equality ;
+    // expression → assignment ;
     fn expression(&self) -> ExprResult<'a> {
-        self.equality()
+        self.assignment()
+    }
+
+    // assignment → IDENTIFIER "=" assignment
+    //            | equality ;
+    fn assignment(&self) -> ExprResult<'a> {
+        let expr = self.equality()?;
+
+        if self.matches(&[TokenType::Equal])? {
+            let value = self.assignment()?;
+
+            if let ast::Expr::Variable(name) = *expr {
+                return Ok(Box::new(ast::Expr::Assign(AssignExpr { name, value })));
+            }
+        }
+
+        Ok(expr)
     }
 
     // equality → comparison ( ( "!=" | "==" ) comparison )* ;
@@ -308,10 +325,10 @@ pub fn parse_expression<'a>(source: &str) -> ExprResult {
 
 #[cfg(test)]
 mod tests {
-    use crate::ast::UnaryExpr;
+    use crate::ast::{self, *};
+    use crate::error;
     use crate::parser::parse_expression;
-    use crate::scanner::{Token, TokenType, TokenValue};
-    use crate::{ast, error};
+    use crate::scanner::*;
 
     #[test]
     fn comparison() -> Result<(), error::Error> {
@@ -363,6 +380,26 @@ mod tests {
                 right: Box::new(ast::Expr::Literal(TokenValue::Bool(false))),
             })
         );
+        Ok(())
+    }
+
+    #[test]
+    fn assignment() -> Result<(), error::Error> {
+        let assign_simple = parse_expression("foo = 3")?;
+
+        assert_eq!(
+            *assign_simple,
+            ast::Expr::Assign(AssignExpr {
+                name: Token {
+                    token_type: TokenType::Identifier,
+                    lexeme: "foo",
+                    value: None,
+                    line: 0
+                },
+                value: Box::new(ast::Expr::Literal(TokenValue::Number(3.0))),
+            })
+        );
+
         Ok(())
     }
 }

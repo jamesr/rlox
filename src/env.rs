@@ -23,4 +23,12 @@ impl Env {
             None => Err(format!("Undefined variable '{}'.", name)),
         }
     }
+
+    pub fn assign(&mut self, name: String, value: eval::Value) -> anyhow::Result<(), String> {
+        if let Some(mut_ref) = self.values.get_mut(&name) {
+            *mut_ref = value;
+            return Ok(());
+        }
+        Err(format!("Undefined variable '{}'.", name))
+    }
 }

@@ -7,6 +7,7 @@ pub enum Expr<'a> {
     Literal(TokenValue<'a>),
     Unary(UnaryExpr<'a>),
     Variable(Token<'a>),
+    Assign(AssignExpr<'a>),
 }
 
 #[derive(PartialEq, Debug)]
@@ -20,6 +21,12 @@ pub struct BinaryExpr<'a> {
     pub left: Box<Expr<'a>>,
     pub operator: Token<'a>,
     pub right: Box<Expr<'a>>,
+}
+
+#[derive(PartialEq, Debug)]
+pub struct AssignExpr<'a> {
+    pub name: Token<'a>,
+    pub value: Box<Expr<'a>>,
 }
 
 #[derive(PartialEq, Debug)]
@@ -46,12 +53,14 @@ pub trait Visitor<T> {
             Literal(l) => self.visit_literal(l),
             Unary(u) => self.visit_unary_expr(u),
             Variable(t) => self.visit_variable(t),
+            Assign(a) => self.visit_assign(a),
         }
     }
     fn visit_binary_expr(&mut self, e: &BinaryExpr) -> T;
     fn visit_grouping_expr(&mut self, e: &Expr) -> T;
     fn visit_unary_expr(&mut self, e: &UnaryExpr) -> T;
     fn visit_variable(&mut self, t: &Token) -> T;
+    fn visit_assign(&mut self, a: &AssignExpr) -> T;
 
     fn visit_stmt(&mut self, s: &Stmt) {
         use Stmt::*;
@@ -105,6 +114,10 @@ impl Visitor<String> for AstPrinter {
 
     fn visit_variable(&mut self, t: &Token) -> String {
         format!("variable ( {} )", t.lexeme)
+    }
+
+    fn visit_assign(&mut self, a: &AssignExpr) -> String {
+        format!("assign {} = ( {} )", a.name, self.visit_expr(&a.value))
     }
 
     fn visit_print_stmt(&mut self, _: &Expr) {}
