@@ -242,7 +242,6 @@ mod tests {
         ($name:ident, $source:expr) => {
             #[test]
             fn $name() -> anyhow::Result<(), error::Error> {
-                println!("{}", $source);
                 let mut interpreter = Interpreter::new();
 
                 let stmts = crate::parser::parse($source)?;
@@ -298,5 +297,14 @@ mod tests {
         r#"
     var all_tests_passed = false;
     while (!all_tests_passed) all_tests_passed = true;"#
+    );
+
+    eval_string_stmts_test!(
+        for_loop,
+        r#"var i = 0;
+    for (var j = 0; j < 5; j = j + 1) {
+        i = i + 1;
+    }
+    var all_tests_passed = i == 5;"#
     );
 }

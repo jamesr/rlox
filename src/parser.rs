@@ -322,11 +322,15 @@ impl<'a> Parser<'a> {
     }
 
     // statement → exprStmt
+    //           | forStmt
     //           | ifStmt
     //           | printStmt
     //           | whileStmt
     //           | block ;
     fn statement(&self) -> StmtResult<'a> {
+        if self.matches(&[TokenType::For])? {
+            return self.for_stmt();
+        }
         if self.matches(&[TokenType::If])? {
             return self.if_stmt();
         }
@@ -402,6 +406,63 @@ impl<'a> Parser<'a> {
         let body = self.statement()?;
 
         Ok(Box::new(ast::Stmt::While(WhileStmt { condition, body })))
+    }
+
+    // forStmt → "for" "(" ( varDecl | exprStmt | ";" )
+    //           expression? ";"
+    //           expression? ")" statement ;
+    fn for_stmt(&self) -> StmtResult<'a> {
+        self.consume(TokenType::LeftParen, "Expect '(' after 'for'.")?;
+
+        let initializer = if self.matches(&[TokenType::Semicolon])? {
+            None
+        } else if self.matches(&[TokenType::Var])? {
+            Some(self.var_decl()?)
+        } else {
+            Some(self.expr_stmt()?)
+        };
+
+        let condition = if self.check(TokenType::Semicolon) {
+            Box::new(ast::Expr::Literal(TokenValue::Bool(true)))
+        } else {
+            self.expression()?
+        };
+        self.consume(TokenType::Semicolon, "Expect ';' after loop condition.")?;
+
+        let increment = if self.check(TokenType::RightParen) {
+            None
+        } else {
+            Some(self.expression()?)
+        };
+        self.consume(TokenType::RightParen, "Expect ')' after for clauses.")?;
+
+        let body = self.statement()?;
+
+        // desugar to:
+        // {
+        //    initializer;
+        //    while ( condition ) {
+        //      body ;
+        //      increment ;
+        //    }
+        // }
+
+        let mut outer_block_stmts = vec![];
+        if let Some(init_stmt) = initializer {
+            outer_block_stmts.push(init_stmt);
+        }
+
+        let mut while_block_stmts = vec![body];
+        if let Some(increment_expr) = increment {
+            while_block_stmts.push(Box::new(ast::Stmt::Expr(increment_expr)));
+        }
+
+        outer_block_stmts.push(Box::new(ast::Stmt::While(WhileStmt {
+            condition,
+            body: Box::new(ast::Stmt::Block(while_block_stmts)),
+        })));
+
+        Ok(Box::new(ast::Stmt::Block(outer_block_stmts)))
     }
 }
 
@@ -647,6 +708,71 @@ mod tests {
         );
 
         assert_eq!(stmts.len(), 1);
+
+        Ok(())
+    }
+
+    #[test]
+    fn for_loop() -> anyhow::Result<(), error::Error> {
+        //   for (var i = 0; i < 10; i = i + 1) print i;
+        // Desugars to:
+        //   {
+        //     var i = 0;
+        //     while (i < 10) {
+        //       print i;
+        //       i = i + 1;
+        //     }
+        //   }
+        let stmts = parse("for (var i = 0; i < 10; i = i + 1) print i;")?;
+
+        let i_token = Token {
+            token_type: TokenType::Identifier,
+            lexeme: "i",
+            value: None,
+            line: 0,
+        };
+
+        assert_eq!(
+            stmts,
+            vec![Box::new(ast::Stmt::Block(vec![
+                // "var i = 0;"
+                Box::new(ast::Stmt::Var(VarDecl {
+                    name: i_token,
+                    initializer: Some(Box::new(ast::Expr::Literal(TokenValue::Number(0.0))))
+                },)),
+                // "while (i < 10) {"
+                Box::new(ast::Stmt::While(WhileStmt {
+                    condition: Box::new(ast::Expr::Binary(BinaryExpr {
+                        left: Box::new(ast::Expr::Variable(i_token)),
+                        operator: Token {
+                            token_type: TokenType::Less,
+                            lexeme: "<",
+                            value: None,
+                            line: 0
+                        },
+                        right: Box::new(ast::Expr::Literal(TokenValue::Number(10.0))),
+                    })),
+                    body: Box::new(ast::Stmt::Block(vec![
+                        // "print i;"
+                        Box::new(ast::Stmt::Print(Box::new(ast::Expr::Variable(i_token)))),
+                        // "i = i + 1;"
+                        Box::new(ast::Stmt::Expr(Box::new(ast::Expr::Assign(AssignExpr {
+                            name: i_token,
+                            value: Box::new(ast::Expr::Binary(BinaryExpr {
+                                left: Box::new(ast::Expr::Variable(i_token)),
+                                operator: Token {
+                                    token_type: TokenType::Plus,
+                                    lexeme: "+",
+                                    value: None,
+                                    line: 0,
+                                },
+                                right: Box::new(ast::Expr::Literal(TokenValue::Number(1.0)),)
+                            }))
+                        }))))
+                    ])),
+                },))
+            ]))]
+        );
 
         Ok(())
     }

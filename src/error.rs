@@ -57,6 +57,15 @@ impl From<String> for Error {
     }
 }
 
+impl From<&str> for Error {
+    fn from(message: &str) -> Self {
+        Error {
+            loc: Location::default(),
+            message: message.to_string(),
+        }
+    }
+}
+
 impl From<std::io::Error> for Error {
     fn from(e: std::io::Error) -> Self {
         Error {
