@@ -189,6 +189,12 @@ impl ast::Visitor<InterpreterResult> for Interpreter {
             }
         }
     }
+
+    fn visit_while_stmt(&mut self, w: &ast::WhileStmt) {
+        while truthy(&self.visit_expr(&w.condition).ok().unwrap()) {
+            self.visit_stmt(&w.body);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -279,4 +285,18 @@ mod tests {
     eval_string_stmts_test!(logical_and, "var all_tests_passed = true and true;");
 
     eval_string_stmts_test!(logical_and_nil, "var all_tests_passed = ! nil and true;");
+
+    eval_string_stmts_test!(
+        while_false,
+        r#"
+    var all_tests_passed = true;
+    while (false) all_tests_passed = false;"#
+    );
+
+    eval_string_stmts_test!(
+        while_true,
+        r#"
+    var all_tests_passed = false;
+    while (!all_tests_passed) all_tests_passed = true;"#
+    );
 }

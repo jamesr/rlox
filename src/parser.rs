@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use crate::ast::{AssignExpr, IfStmt, LogicalExpr};
+use crate::ast::{AssignExpr, IfStmt, LogicalExpr, WhileStmt};
 use crate::scanner::{Scanner, Token, TokenType, TokenValue};
 use crate::{ast, error};
 
@@ -324,6 +324,7 @@ impl<'a> Parser<'a> {
     // statement → exprStmt
     //           | ifStmt
     //           | printStmt
+    //           | whileStmt
     //           | block ;
     fn statement(&self) -> StmtResult<'a> {
         if self.matches(&[TokenType::If])? {
@@ -332,7 +333,9 @@ impl<'a> Parser<'a> {
         if self.matches(&[TokenType::Print])? {
             return self.print_stmt();
         }
-
+        if self.matches(&[TokenType::While])? {
+            return self.while_stmt();
+        }
         if self.matches(&[TokenType::LeftBrace])? {
             return Ok(Box::new(ast::Stmt::Block(self.block()?)));
         }
@@ -386,6 +389,19 @@ impl<'a> Parser<'a> {
             then_branch,
             else_branch,
         })))
+    }
+
+    // whileStmt → "while" "(" expression ")" statement ;
+    fn while_stmt(&self) -> StmtResult<'a> {
+        self.consume(TokenType::LeftParen, "Expect '(' after 'while'.")?;
+
+        let condition = self.expression()?;
+
+        self.consume(TokenType::RightParen, "Expect '(' after 'while'.")?;
+
+        let body = self.statement()?;
+
+        Ok(Box::new(ast::Stmt::While(WhileStmt { condition, body })))
     }
 }
 
@@ -575,6 +591,59 @@ mod tests {
                 },
                 right: Box::new(ast::Expr::Literal(TokenValue::Bool(true))),
             }))))
+        );
+
+        assert_eq!(stmts.len(), 1);
+
+        Ok(())
+    }
+
+    #[test]
+    fn while_loop() -> anyhow::Result<(), error::Error> {
+        let stmts = parse("while (i < 5) i = i + 1;")?;
+
+        assert_eq!(
+            stmts[0],
+            Box::new(ast::Stmt::While(WhileStmt {
+                condition: Box::new(ast::Expr::Binary(BinaryExpr {
+                    left: Box::new(ast::Expr::Variable(Token {
+                        token_type: TokenType::Identifier,
+                        lexeme: "i",
+                        value: None,
+                        line: 0
+                    })),
+                    operator: Token {
+                        token_type: TokenType::Less,
+                        lexeme: "<",
+                        value: None,
+                        line: 0
+                    },
+                    right: Box::new(ast::Expr::Literal(TokenValue::Number(5.0)))
+                })),
+                body: Box::new(ast::Stmt::Expr(Box::new(ast::Expr::Assign(AssignExpr {
+                    name: Token {
+                        token_type: TokenType::Identifier,
+                        lexeme: "i",
+                        value: None,
+                        line: 0
+                    },
+                    value: Box::new(ast::Expr::Binary(BinaryExpr {
+                        left: Box::new(ast::Expr::Variable(Token {
+                            token_type: TokenType::Identifier,
+                            lexeme: "i",
+                            value: None,
+                            line: 0
+                        })),
+                        operator: Token {
+                            token_type: TokenType::Plus,
+                            lexeme: "+",
+                            value: None,
+                            line: 0
+                        },
+                        right: Box::new(ast::Expr::Literal(TokenValue::Number(1.0)))
+                    }))
+                }))))
+            }))
         );
 
         assert_eq!(stmts.len(), 1);

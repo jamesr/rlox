@@ -44,6 +44,7 @@ pub enum Stmt<'a> {
     Block(Vec<Box<Stmt<'a>>>),
     Var(VarDecl<'a>),
     If(IfStmt<'a>),
+    While(WhileStmt<'a>),
 }
 
 #[derive(PartialEq, Debug)]
@@ -57,6 +58,12 @@ pub struct IfStmt<'a> {
     pub condition: Box<Expr<'a>>,
     pub then_branch: Box<Stmt<'a>>,
     pub else_branch: Option<Box<Stmt<'a>>>,
+}
+
+#[derive(PartialEq, Debug)]
+pub struct WhileStmt<'a> {
+    pub condition: Box<Expr<'a>>,
+    pub body: Box<Stmt<'a>>,
 }
 
 pub trait Visitor<T> {
@@ -92,6 +99,7 @@ pub trait Visitor<T> {
                 self.visit_var_decl_stmt(v);
             }
             If(i) => self.visit_if_stmt(i),
+            While(i) => self.visit_while_stmt(i),
         }
     }
 
@@ -99,6 +107,7 @@ pub trait Visitor<T> {
     fn visit_print_stmt(&mut self, e: &Expr);
     fn visit_var_decl_stmt(&mut self, v: &VarDecl);
     fn visit_if_stmt(&mut self, i: &IfStmt);
+    fn visit_while_stmt(&mut self, w: &WhileStmt);
 }
 
 pub struct AstPrinter;
@@ -150,6 +159,7 @@ impl Visitor<String> for AstPrinter {
     fn visit_print_stmt(&mut self, _: &Expr) {}
     fn visit_var_decl_stmt(&mut self, _: &VarDecl) {}
     fn visit_if_stmt(&mut self, _: &IfStmt) {}
+    fn visit_while_stmt(&mut self, _: &WhileStmt) {}
 }
 
 #[cfg(test)]
