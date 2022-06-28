@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use crate::ast::{AssignExpr, IfStmt};
+use crate::ast::{AssignExpr, IfStmt, LogicalExpr};
 use crate::scanner::{Scanner, Token, TokenType, TokenValue};
 use crate::{ast, error};
 
@@ -30,6 +30,7 @@ impl<'a> Parser<'a> {
 
     pub fn parse_expression(&mut self) -> ExprResult<'a> {
         self.prime()?;
+
         self.expression()
     }
 
@@ -155,9 +156,9 @@ impl<'a> Parser<'a> {
     }
 
     // assignment → IDENTIFIER "=" assignment
-    //            | equality ;
+    //              | logic_or ;
     fn assignment(&self) -> ExprResult<'a> {
-        let expr = self.equality()?;
+        let expr = self.logic_or()?;
 
         if self.matches(&[TokenType::Equal])? {
             let value = self.assignment()?;
@@ -165,6 +166,39 @@ impl<'a> Parser<'a> {
             if let ast::Expr::Variable(name) = *expr {
                 return Ok(Box::new(ast::Expr::Assign(AssignExpr { name, value })));
             }
+        }
+
+        Ok(expr)
+    }
+
+    // logic_or       → logic_and ( "or" logic_and )* ;
+    fn logic_or(&self) -> ExprResult<'a> {
+        let mut expr = self.logic_and()?;
+
+        while self.matches(&[TokenType::Or])? {
+            let operator = self.previous().unwrap();
+            let right = self.logic_and()?;
+            expr = Box::new(ast::Expr::Logical(LogicalExpr {
+                left: expr,
+                operator,
+                right,
+            }));
+        }
+
+        Ok(expr)
+    }
+    // logic_and      → equality ( "and" equality )* ;
+    fn logic_and(&self) -> ExprResult<'a> {
+        let mut expr = self.equality()?;
+
+        while self.matches(&[TokenType::And])? {
+            let operator = self.previous().unwrap();
+            let right = self.equality()?;
+            expr = Box::new(ast::Expr::Logical(LogicalExpr {
+                left: expr,
+                operator,
+                right,
+            }));
         }
 
         Ok(expr)
@@ -521,6 +555,29 @@ mod tests {
         );
 
         assert_eq!(stmts.len(), 2);
+
+        Ok(())
+    }
+
+    #[test]
+    fn logical_or() -> anyhow::Result<(), error::Error> {
+        let stmts = parse("false and true;")?;
+
+        assert_eq!(
+            stmts[0],
+            Box::new(ast::Stmt::Expr(Box::new(ast::Expr::Logical(LogicalExpr {
+                left: Box::new(ast::Expr::Literal(TokenValue::Bool(false))),
+                operator: Token {
+                    token_type: TokenType::And,
+                    lexeme: "and",
+                    value: None,
+                    line: 0
+                },
+                right: Box::new(ast::Expr::Literal(TokenValue::Bool(true))),
+            }))))
+        );
+
+        assert_eq!(stmts.len(), 1);
 
         Ok(())
     }

@@ -141,6 +141,22 @@ impl ast::Visitor<InterpreterResult> for Interpreter {
         Ok(value)
     }
 
+    fn visit_logical(&mut self, l: &ast::LogicalExpr) -> InterpreterResult {
+        let left = self.visit_expr(&l.left).ok().unwrap();
+
+        if l.operator.token_type == scanner::TokenType::Or {
+            if truthy(&left) {
+                return Ok(left);
+            }
+        } else {
+            assert_eq!(l.operator.token_type, scanner::TokenType::And);
+            if !truthy(&left) {
+                return Ok(left);
+            }
+        }
+        self.visit_expr(&l.right)
+    }
+
     fn visit_block(&mut self, v: &Vec<Box<ast::Stmt>>) {
         self.env.push_block();
         for s in v {
@@ -163,12 +179,9 @@ impl ast::Visitor<InterpreterResult> for Interpreter {
     }
 
     fn visit_if_stmt(&mut self, i: &ast::IfStmt) {
-        let condition = match self.visit_expr(&i.condition).unwrap() {
-            Value::Bool(b) => b,
-            _ => panic!("if statement did not evaluate to bool"),
-        };
+        let condition = self.visit_expr(&i.condition);
 
-        if condition {
+        if truthy(&condition.ok().unwrap()) {
             self.visit_stmt(&i.then_branch);
         } else {
             if let Some(s) = &i.else_branch {
@@ -258,4 +271,12 @@ mod tests {
                all_tests_passed = true;
            }"#
     );
+
+    eval_string_stmts_test!(logical_or, "var all_tests_passed = true or false;");
+
+    eval_string_stmts_test!(logical_or_nil, "var all_tests_passed = true or nil;");
+
+    eval_string_stmts_test!(logical_and, "var all_tests_passed = true and true;");
+
+    eval_string_stmts_test!(logical_and_nil, "var all_tests_passed = ! nil and true;");
 }
