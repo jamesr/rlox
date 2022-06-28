@@ -161,6 +161,21 @@ impl ast::Visitor<InterpreterResult> for Interpreter {
 
         self.env.define(v.name.lexeme.to_string(), initial);
     }
+
+    fn visit_if_stmt(&mut self, i: &ast::IfStmt) {
+        let condition = match self.visit_expr(&i.condition).unwrap() {
+            Value::Bool(b) => b,
+            _ => panic!("if statement did not evaluate to bool"),
+        };
+
+        if condition {
+            self.visit_stmt(&i.then_branch);
+        } else {
+            if let Some(s) = &i.else_branch {
+                self.visit_stmt(s);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -212,6 +227,11 @@ mod tests {
                 let mut interpreter = Interpreter::new();
 
                 let stmts = crate::parser::parse($source)?;
+                let mut printer = crate::ast::AstPrinter {};
+                for stmt in &stmts {
+                    use crate::ast::Visitor;
+                    printer.visit_stmt(&stmt);
+                }
                 interpreter.interpret(stmts);
 
                 let all_tests_passed_expr = crate::parser::parse_expression("all_tests_passed")?;
@@ -229,5 +249,13 @@ mod tests {
         r#"var foo = 3;
          { var foo = 5; }
          var all_tests_passed = foo == 3;"#
+    );
+
+    eval_string_stmts_test!(
+        if_statement,
+        r#"var all_tests_passed;
+           if (true) {
+               all_tests_passed = true;
+           }"#
     );
 }

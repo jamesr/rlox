@@ -87,9 +87,34 @@ impl<'a> fmt::Display for Token<'a> {
     }
 }
 
+#[derive(Default, Clone)]
+struct Loc {
+    lines: Range<usize>, // lines of the token being scanned
+    cols: Range<usize>,  // columns of the token being scanned in chars
+}
+
+impl Loc {
+    fn advance_lines(&mut self, lines: usize) {
+        self.lines.end += lines;
+    }
+
+    fn advance_col(&mut self) {
+        self.cols.end += 1;
+    }
+
+    fn consume(&mut self) {
+        self.lines.start = self.lines.end;
+        self.cols.start = self.cols.end;
+    }
+
+    fn line(&self) -> usize {
+        self.lines.end
+    }
+}
+
 pub struct Scanner<'a> {
     source: &'a str,
-    pub line: usize,           // current line
+    loc: Loc,
     pub current: Range<usize>, // byte indices into |source|, must be on UTF-8 char boundaries
 }
 
@@ -99,13 +124,17 @@ impl<'a> Scanner<'a> {
     pub fn new(source: &'a str) -> Scanner {
         Scanner {
             source,
-            line: 0,
+            loc: Loc::default(),
             current: (0..0),
         }
     }
 
     pub fn line(&self) -> usize {
-        self.line
+        self.loc.line()
+    }
+
+    pub fn cols(&self) -> Range<usize> {
+        self.loc.cols.clone()
     }
 
     fn current(&self) -> &'a str {
@@ -123,6 +152,7 @@ impl<'a> Scanner<'a> {
     fn advance(&mut self) -> Option<char> {
         if let Some(c) = self.rest().chars().next() {
             self.current.end += c.len_utf8();
+            self.loc.advance_col();
             return Some(c);
         }
         return None;
@@ -132,7 +162,8 @@ impl<'a> Scanner<'a> {
         match self.rest().chars().next() {
             Some(c) => {
                 if c == expected {
-                    self.current.end += c.len_utf16();
+                    self.current.end += c.len_utf8();
+                    self.loc.advance_col();
                     return true;
                 } else {
                     return false;
@@ -151,20 +182,20 @@ impl<'a> Scanner<'a> {
     }
 
     fn string(&mut self) -> ScanResult<'a> {
-        let mut line = 0;
+        let mut lines = 0;
         self.advance_matching(|o| match o {
             Some('"') | None => false,
             Some('\n') => {
-                line += 1;
+                lines += 1;
                 true
             }
             _ => true,
         });
-        self.line += line;
+        self.loc.advance_lines(lines);
 
         if self.at_end() {
             return Err(error::Error::with_col(
-                self.line,
+                self.line(),
                 self.current.clone(),
                 "Unterminated string.".to_string(),
             ));
@@ -177,7 +208,7 @@ impl<'a> Scanner<'a> {
             token_type: TokenType::String,
             lexeme,
             value: Some(TokenValue::String(value)),
-            line: self.line,
+            line: self.line(),
         })
     }
 
@@ -217,7 +248,7 @@ impl<'a> Scanner<'a> {
         let parsed_value = lexeme.parse::<f64>();
         if !parsed_value.is_ok() {
             return Err(error::Error::with_col(
-                self.line,
+                self.line(),
                 self.current.clone(),
                 format!("Error parsing numeric literal {}", lexeme),
             ));
@@ -226,7 +257,7 @@ impl<'a> Scanner<'a> {
             token_type: TokenType::Number,
             lexeme,
             value: Some(TokenValue::Number(parsed_value.unwrap())),
-            line: self.line,
+            line: self.line(),
         })
     }
 
@@ -260,7 +291,7 @@ impl<'a> Scanner<'a> {
         };
         Ok(Token {
             token_type,
-            line: self.line,
+            line: self.line(),
             lexeme,
             value: None,
         })
@@ -271,7 +302,7 @@ impl<'a> Scanner<'a> {
             token_type,
             lexeme: self.current(),
             value: None,
-            line: self.line,
+            line: self.line(),
         }
     }
 }
@@ -282,6 +313,7 @@ impl<'a> Iterator for Scanner<'a> {
     fn next(&mut self) -> Option<ScanResult<'a>> {
         use TokenType::*;
         loop {
+            self.loc.consume();
             self.current.start = self.current.end;
             let maybe_token = if let Some(c) = self.advance() {
                 match c {
@@ -343,7 +375,7 @@ impl<'a> Iterator for Scanner<'a> {
                     ' ' | '\r' | '\t' => None,
 
                     '\n' => {
-                        self.line += 1;
+                        self.loc.advance_lines(1);
                         None
                     }
 
@@ -359,10 +391,12 @@ impl<'a> Iterator for Scanner<'a> {
                                 Err(e) => return Some(Err(e)),
                             }
                         } else {
+                            let error_loc = self.loc.clone();
+                            self.loc.consume();
                             self.current.start = self.current.end;
                             return Some(Err(error::Error::with_col(
-                                self.line,
-                                self.current.clone(),
+                                error_loc.line(),
+                                error_loc.cols,
                                 format!("unexpected character '{}'", c),
                             )));
                         }

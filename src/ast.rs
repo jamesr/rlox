@@ -35,12 +35,20 @@ pub enum Stmt<'a> {
     Print(Box<Expr<'a>>),
     Block(Vec<Box<Stmt<'a>>>),
     Var(VarDecl<'a>),
+    If(IfStmt<'a>),
 }
 
 #[derive(PartialEq, Debug)]
 pub struct VarDecl<'a> {
     pub name: Token<'a>,
     pub initializer: Option<Box<Expr<'a>>>,
+}
+
+#[derive(PartialEq, Debug)]
+pub struct IfStmt<'a> {
+    pub condition: Box<Expr<'a>>,
+    pub then_branch: Box<Stmt<'a>>,
+    pub else_branch: Option<Box<Stmt<'a>>>,
 }
 
 pub trait Visitor<T> {
@@ -73,12 +81,14 @@ pub trait Visitor<T> {
             Var(v) => {
                 self.visit_var_decl_stmt(v);
             }
+            If(i) => self.visit_if_stmt(i),
         }
     }
 
     fn visit_block(&mut self, v: &Vec<Box<Stmt>>);
     fn visit_print_stmt(&mut self, e: &Expr);
     fn visit_var_decl_stmt(&mut self, v: &VarDecl);
+    fn visit_if_stmt(&mut self, i: &IfStmt);
 }
 
 pub struct AstPrinter;
@@ -120,6 +130,7 @@ impl Visitor<String> for AstPrinter {
     fn visit_block(&mut self, _: &Vec<Box<Stmt>>) {}
     fn visit_print_stmt(&mut self, _: &Expr) {}
     fn visit_var_decl_stmt(&mut self, _: &VarDecl) {}
+    fn visit_if_stmt(&mut self, _: &IfStmt) {}
 }
 
 #[cfg(test)]

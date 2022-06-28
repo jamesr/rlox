@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use crate::ast::AssignExpr;
+use crate::ast::{AssignExpr, IfStmt};
 use crate::scanner::{Scanner, Token, TokenType, TokenValue};
 use crate::{ast, error};
 
@@ -82,9 +82,9 @@ impl<'a> Parser<'a> {
     fn prime(&self) -> anyhow::Result<(), error::Error> {
         let first = match self.state.borrow_mut().scanner.next() {
             Some(result) => result,
-            None => return Err(error::Error::new("Expected expression".to_string())),
-        };
-        self.state.borrow_mut().current = Some(first?);
+            None => return Err(error::Error::new("expected expression".to_string())),
+        }?;
+        self.state.borrow_mut().current = Some(first);
         Ok(())
     }
 
@@ -109,7 +109,7 @@ impl<'a> Parser<'a> {
 
     fn error(&self, message: String) -> error::Error {
         let scanner = &self.state.borrow().scanner;
-        error::Error::with_col(scanner.line, scanner.current.clone(), message)
+        error::Error::with_col(scanner.line(), scanner.cols(), message)
     }
 
     fn advance(&self) -> anyhow::Result<(), error::Error> {
@@ -288,9 +288,13 @@ impl<'a> Parser<'a> {
     }
 
     // statement → exprStmt
+    //           | ifStmt
     //           | printStmt
     //           | block ;
     fn statement(&self) -> StmtResult<'a> {
+        if self.matches(&[TokenType::If])? {
+            return self.if_stmt();
+        }
         if self.matches(&[TokenType::Print])? {
             return self.print_stmt();
         }
@@ -327,6 +331,27 @@ impl<'a> Parser<'a> {
         let expr = self.expression()?;
         self.consume(TokenType::Semicolon, "Expect ';' after value.")?;
         Ok(Box::new(ast::Stmt::Print(expr)))
+    }
+
+    // ifStmt → "if" "(" expression ")" statement
+    //          ( "else" statement )? ;
+    fn if_stmt(&self) -> StmtResult<'a> {
+        self.consume(TokenType::LeftParen, "Expect '(' after 'if'.")?;
+        let condition = self.expression()?;
+        self.consume(TokenType::RightParen, "Expect ')' after if condition.")?;
+
+        let then_branch = self.statement()?;
+        let else_branch = if self.matches(&[TokenType::Else])? {
+            Some(self.statement()?)
+        } else {
+            None
+        };
+
+        Ok(Box::new(ast::Stmt::If(IfStmt {
+            condition,
+            then_branch,
+            else_branch,
+        })))
     }
 }
 
@@ -432,6 +457,70 @@ mod tests {
                 ast::Expr::Literal(TokenValue::Number(5.0))
             ),))]))
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn if_statement() -> anyhow::Result<(), error::Error> {
+        let if_statement = parse("if ( true ) { print 5; }")?;
+
+        assert_eq!(
+            if_statement[0],
+            Box::new(ast::Stmt::If(IfStmt {
+                condition: Box::new(ast::Expr::Literal(TokenValue::Bool(true))),
+                then_branch: Box::new(ast::Stmt::Block(vec![Box::new(ast::Stmt::Print(
+                    Box::new(ast::Expr::Literal(TokenValue::Number(5.0)))
+                ))])),
+                else_branch: None,
+            }))
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn multiple_statements() -> anyhow::Result<(), error::Error> {
+        let stmts = parse(
+            r#"var all_tests_passed;
+           if (true) {
+               all_tests_passed = true;
+           }"#,
+        )?;
+
+        assert_eq!(
+            stmts[0],
+            Box::new(ast::Stmt::Var(VarDecl {
+                name: Token {
+                    token_type: TokenType::Identifier,
+                    lexeme: "all_tests_passed",
+                    value: None,
+                    line: 0
+                },
+                initializer: None,
+            }))
+        );
+
+        assert_eq!(
+            stmts[1],
+            Box::new(ast::Stmt::If(IfStmt {
+                condition: Box::new(ast::Expr::Literal(TokenValue::Bool(true))),
+                then_branch: Box::new(ast::Stmt::Block(vec![Box::new(ast::Stmt::Expr(Box::new(
+                    ast::Expr::Assign(AssignExpr {
+                        name: Token {
+                            token_type: TokenType::Identifier,
+                            lexeme: "all_tests_passed",
+                            value: None,
+                            line: 2
+                        },
+                        value: Box::new(ast::Expr::Literal(TokenValue::Bool(true)))
+                    })
+                )))])),
+                else_branch: None,
+            }))
+        );
+
+        assert_eq!(stmts.len(), 2);
 
         Ok(())
     }
