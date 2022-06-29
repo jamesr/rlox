@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::eval;
+use crate::{error::RuntimeError, eval};
 
 type Values = HashMap<String, eval::Value>;
 
@@ -41,19 +41,19 @@ impl Env {
         None
     }
 
-    pub fn get(&self, name: String) -> anyhow::Result<eval::Value, String> {
+    pub fn get(&self, name: String) -> anyhow::Result<eval::Value, RuntimeError> {
         match self.find(&name) {
             Some(v) => Ok(v.clone()),
-            None => Err(format!("Undefined variable '{}'.", name)),
+            None => Err(format!("Undefined variable '{}'.", name).into()),
         }
     }
 
-    pub fn assign(&mut self, name: String, value: eval::Value) -> anyhow::Result<(), String> {
+    pub fn assign(&mut self, name: String, value: eval::Value) -> anyhow::Result<(), RuntimeError> {
         if let Some(mut_ref) = self.find_mut(&name) {
             *mut_ref = value;
             return Ok(());
         }
-        Err(format!("Undefined variable '{}'.", name))
+        Err(format!("Undefined variable '{}'.", name).into())
     }
 
     pub fn push_block(&mut self) {

@@ -3,6 +3,7 @@ use std::fmt::Display;
 use crate::{
     ast::{self, Visitor},
     env,
+    error::RuntimeError,
     scanner::{self, Token, TokenValue},
 };
 
@@ -29,7 +30,7 @@ pub struct Interpreter {
     env: Box<env::Env>,
 }
 
-type InterpreterResult = anyhow::Result<Value, String>;
+type InterpreterResult = anyhow::Result<Value, RuntimeError>;
 
 impl Interpreter {
     pub fn new() -> Interpreter {
@@ -57,10 +58,10 @@ fn truthy(v: &Value) -> bool {
     }
 }
 
-fn as_number(v: &Value) -> anyhow::Result<f64, String> {
+fn as_number(v: &Value) -> anyhow::Result<f64, RuntimeError> {
     match v {
         Value::Number(n) => Ok(*n),
-        _ => Err(format!("value {:?} is not a number", v)),
+        _ => Err(format!("value {:?} is not a number", v).into()),
     }
 }
 
@@ -86,31 +87,29 @@ impl ast::Visitor<InterpreterResult> for Interpreter {
             Plus => match left {
                 Value::Number(left_number) => match right {
                     Value::Number(right_number) => Ok(Value::Number(left_number + right_number)),
-                    _ => Err(format!(
-                        "type mismatch for operator +, number and {:?}",
-                        right
-                    )),
+                    _ => {
+                        Err(format!("type mismatch for operator +, number and {:?}", right).into())
+                    }
                 },
 
                 Value::String(left_string) => match right {
                     Value::String(right_string) => Ok(Value::String(left_string + &right_string)),
 
-                    _ => Err(format!(
-                        "type mismatch for operator +, string and {:?}",
-                        right
-                    )),
+                    _ => {
+                        Err(format!("type mismatch for operator +, string and {:?}", right).into())
+                    }
                 },
 
-                _ => Err(format!("unsupported type for operator + {:?}", left)),
+                _ => Err(format!("unsupported type for operator + {:?}", left).into()),
             },
-            Greater => Ok(Value::Bool(as_number(&left) > as_number(&right))),
-            GreaterEqual => Ok(Value::Bool(as_number(&left) >= as_number(&right))),
-            Less => Ok(Value::Bool(as_number(&left) < as_number(&right))),
-            LessEqual => Ok(Value::Bool(as_number(&left) <= as_number(&right))),
+            Greater => Ok(Value::Bool(as_number(&left)? > as_number(&right)?)),
+            GreaterEqual => Ok(Value::Bool(as_number(&left)? >= as_number(&right)?)),
+            Less => Ok(Value::Bool(as_number(&left)? < as_number(&right)?)),
+            LessEqual => Ok(Value::Bool(as_number(&left)? <= as_number(&right)?)),
             BangEqual => Ok(Value::Bool(left != right)),
             EqualEqual => Ok(Value::Bool(left == right)),
 
-            _ => Err(format!("unknown operator {}", e.operator.lexeme)),
+            _ => Err(format!("unknown operator {}", e.operator.lexeme).into()),
         }
     }
 
@@ -124,10 +123,10 @@ impl ast::Visitor<InterpreterResult> for Interpreter {
         match e.operator.token_type {
             Minus => match val {
                 Value::Number(n) => Ok(Value::Number(-n)),
-                _ => Err("unary - must be applied to a number".to_string()),
+                _ => Err("unary - must be applied to a number".into()),
             },
             Bang => Ok(Value::Bool(!truthy(&val))),
-            _ => Err("unsupported unary operator".to_string()),
+            _ => Err("unsupported unary operator".into()),
         }
     }
 

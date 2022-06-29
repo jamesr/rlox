@@ -118,7 +118,7 @@ pub struct Scanner<'a> {
     pub current: Range<usize>, // byte indices into |source|, must be on UTF-8 char boundaries
 }
 
-type ScanResult<'a> = anyhow::Result<Token<'a>, error::Error>;
+type ScanResult<'a> = anyhow::Result<Token<'a>, error::ParseError>;
 
 impl<'a> Scanner<'a> {
     pub fn new(source: &'a str) -> Scanner {
@@ -131,6 +131,17 @@ impl<'a> Scanner<'a> {
 
     pub fn line(&self) -> usize {
         self.loc.line()
+    }
+
+    pub fn loc(&self) -> error::Location {
+        error::Location {
+            line: self.line(),
+            col: self.cols(),
+        }
+    }
+
+    pub fn error(&self, message: String) -> error::ParseError {
+        error::ParseError::new(message, self.loc(), false)
     }
 
     pub fn cols(&self) -> Range<usize> {
@@ -194,11 +205,7 @@ impl<'a> Scanner<'a> {
         self.loc.advance_lines(lines);
 
         if self.at_end() {
-            return Err(error::Error::with_col(
-                self.line(),
-                self.current.clone(),
-                "Unterminated string.".to_string(),
-            ));
+            return Err(self.error("Unterminated string.".to_string()));
         }
         self.advance(); // Consume closing "
 
@@ -247,11 +254,7 @@ impl<'a> Scanner<'a> {
         let lexeme = self.current();
         let parsed_value = lexeme.parse::<f64>();
         if !parsed_value.is_ok() {
-            return Err(error::Error::with_col(
-                self.line(),
-                self.current.clone(),
-                format!("Error parsing numeric literal {}", lexeme),
-            ));
+            return Err(self.error(format!("Error parsing numeric literal {}", lexeme)));
         }
         Ok(Token {
             token_type: TokenType::Number,
@@ -391,14 +394,9 @@ impl<'a> Iterator for Scanner<'a> {
                                 Err(e) => return Some(Err(e)),
                             }
                         } else {
-                            let error_loc = self.loc.clone();
                             self.loc.consume();
                             self.current.start = self.current.end;
-                            return Some(Err(error::Error::with_col(
-                                error_loc.line(),
-                                error_loc.cols,
-                                format!("unexpected character '{}'", c),
-                            )));
+                            return Some(Err(self.error(format!("unexpected character '{}'", c))));
                         }
                     }
                 }

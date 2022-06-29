@@ -8,36 +8,25 @@ pub struct Location {
     pub col: Range<usize>,
 }
 
-#[derive(Debug)]
-pub struct Error {
-    pub loc: Location,
+#[derive(Debug, Default)]
+pub struct ParseError {
     pub message: String,
+    pub loc: Location,
+    pub recoverable: bool,
 }
 
-impl Error {
-    pub fn new(message: String) -> Error {
-        Error {
-            loc: Location::default(),
+impl ParseError {
+    pub fn new(message: String, loc: Location, recoverable: bool) -> ParseError {
+        ParseError {
             message,
-        }
-    }
-    pub fn with_line(line: usize, message: String) -> Error {
-        Error {
-            loc: Location { line, col: (0..0) },
-            message,
-        }
-    }
-
-    pub fn with_col(line: usize, col: Range<usize>, message: String) -> Error {
-        Error {
-            loc: Location { line, col },
-            message,
+            loc,
+            recoverable,
         }
     }
 }
 
-impl From<Error> for anyhow::Error {
-    fn from(e: Error) -> Self {
+impl From<ParseError> for anyhow::Error {
+    fn from(e: ParseError) -> Self {
         anyhow!(
             "{} at line {} columns {}..{}",
             e.message,
@@ -48,29 +37,90 @@ impl From<Error> for anyhow::Error {
     }
 }
 
-impl From<String> for Error {
+impl From<String> for ParseError {
     fn from(message: String) -> Self {
-        Error {
-            loc: Location::default(),
+        ParseError {
             message,
+            ..Default::default()
         }
     }
 }
 
-impl From<&str> for Error {
+impl From<&str> for ParseError {
     fn from(message: &str) -> Self {
-        Error {
-            loc: Location::default(),
+        ParseError {
             message: message.to_string(),
+            ..Default::default()
         }
     }
 }
 
-impl From<std::io::Error> for Error {
-    fn from(e: std::io::Error) -> Self {
-        Error {
-            loc: Location::default(),
-            message: format!("I/O error {}", e.to_string()),
+impl From<(String, Location)> for ParseError {
+    fn from(t: (String, Location)) -> Self {
+        ParseError {
+            message: t.0,
+            loc: t.1,
+            recoverable: false,
         }
+    }
+}
+
+impl From<(&str, Location)> for ParseError {
+    fn from(t: (&str, Location)) -> Self {
+        ParseError {
+            message: t.0.to_string(),
+            loc: t.1,
+            recoverable: false,
+        }
+    }
+}
+
+impl From<std::io::Error> for ParseError {
+    fn from(e: std::io::Error) -> Self {
+        ParseError {
+            message: format!("I/O error {}", e.to_string()),
+            ..Default::default()
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct RuntimeError {
+    message: String,
+}
+
+impl RuntimeError {
+    pub fn new(message: String) -> Self {
+        Self { message }
+    }
+}
+
+impl From<String> for RuntimeError {
+    fn from(m: String) -> Self {
+        Self::new(m)
+    }
+}
+
+impl From<&str> for RuntimeError {
+    fn from(m: &str) -> Self {
+        Self::new(m.to_string())
+    }
+}
+
+#[derive(Debug)]
+pub enum Error {
+    Parse(ParseError),
+    Runtime(RuntimeError),
+}
+
+impl From<ParseError> for Error {
+    fn from(e: ParseError) -> Self {
+        Error::Parse(e)
+    }
+}
+
+impl From<RuntimeError> for Error {
+    fn from(e: RuntimeError) -> Self {
+        Error::Runtime(e)
     }
 }

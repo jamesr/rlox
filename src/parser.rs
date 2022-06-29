@@ -13,9 +13,9 @@ pub struct Parser<'a> {
     state: RefCell<ParserState<'a>>,
 }
 
-type ExprResult<'a> = anyhow::Result<Box<ast::Expr<'a>>, error::Error>;
-type StmtResult<'a> = anyhow::Result<Box<ast::Stmt<'a>>, error::Error>;
-type StmtsResult<'a> = anyhow::Result<Vec<Box<ast::Stmt<'a>>>, error::Error>;
+type ExprResult<'a> = anyhow::Result<Box<ast::Expr<'a>>, error::ParseError>;
+type StmtResult<'a> = anyhow::Result<Box<ast::Stmt<'a>>, error::ParseError>;
+type StmtsResult<'a> = anyhow::Result<Vec<Box<ast::Stmt<'a>>>, error::ParseError>;
 
 impl<'a> Parser<'a> {
     pub fn new(scanner: Scanner<'a>) -> Parser<'a> {
@@ -80,10 +80,17 @@ impl<'a> Parser<'a> {
         Ok(Box::new(ast::Stmt::Var(ast::VarDecl { name, initializer })))
     }
 
-    fn prime(&self) -> anyhow::Result<(), error::Error> {
+    fn prime(&self) -> anyhow::Result<(), error::ParseError> {
         let first = match self.state.borrow_mut().scanner.next() {
             Some(result) => result,
-            None => return Err(error::Error::new("expected expression".to_string())),
+            None => {
+                return Err(self
+                    .state
+                    .borrow()
+                    .scanner
+                    .error("expected expression".to_string())
+                    .into())
+            }
         }?;
         self.state.borrow_mut().current = Some(first);
         Ok(())
@@ -108,12 +115,11 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn error(&self, message: String) -> error::Error {
-        let scanner = &self.state.borrow().scanner;
-        error::Error::with_col(scanner.line(), scanner.cols(), message)
+    fn error(&self, message: String) -> error::ParseError {
+        self.state.borrow().scanner.error(message)
     }
 
-    fn advance(&self) -> anyhow::Result<(), error::Error> {
+    fn advance(&self) -> anyhow::Result<(), error::ParseError> {
         let mut current = self.state.borrow_mut().current.take();
         self.state.borrow_mut().prev = current.take();
         let mut new_current = match self.state.borrow_mut().scanner.next() {
@@ -124,7 +130,7 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn matches(&self, types: &[TokenType]) -> anyhow::Result<bool, error::Error> {
+    fn matches(&self, types: &[TokenType]) -> anyhow::Result<bool, error::ParseError> {
         for token_type in types {
             if self.check(*token_type) {
                 self.advance()?;
@@ -134,7 +140,11 @@ impl<'a> Parser<'a> {
         Ok(false)
     }
 
-    fn consume(&self, token_type: TokenType, message: &str) -> anyhow::Result<(), error::Error> {
+    fn consume(
+        &self,
+        token_type: TokenType,
+        message: &str,
+    ) -> anyhow::Result<(), error::ParseError> {
         if self.check(token_type) {
             return self.advance();
         }
@@ -486,7 +496,7 @@ mod tests {
     use crate::scanner::*;
 
     #[test]
-    fn comparison() -> Result<(), error::Error> {
+    fn comparison() -> Result<(), error::ParseError> {
         let expr = parse_expression("0 == 2")?;
         assert!(matches!(*expr, ast::Expr::Binary { .. }));
         if let ast::Expr::Binary(b) = *expr {
@@ -496,7 +506,7 @@ mod tests {
     }
 
     #[test]
-    fn literal() -> Result<(), error::Error> {
+    fn literal() -> Result<(), error::ParseError> {
         let false_literal = parse_expression("false")?;
         assert_eq!(*false_literal, ast::Expr::Literal(TokenValue::Bool(false)));
 
@@ -507,7 +517,7 @@ mod tests {
     }
 
     #[test]
-    fn unary() -> Result<(), error::Error> {
+    fn unary() -> Result<(), error::ParseError> {
         let unary_minus = parse_expression("- 5")?;
         assert_eq!(
             *unary_minus,
@@ -539,7 +549,7 @@ mod tests {
     }
 
     #[test]
-    fn assignment() -> Result<(), error::Error> {
+    fn assignment() -> Result<(), error::ParseError> {
         let assign_simple = parse_expression("foo = 3")?;
 
         assert_eq!(
@@ -559,7 +569,7 @@ mod tests {
     }
 
     #[test]
-    fn block() -> anyhow::Result<(), error::Error> {
+    fn block() -> anyhow::Result<(), error::ParseError> {
         let block = parse("{ 5; }")?;
 
         assert_eq!(
@@ -573,7 +583,7 @@ mod tests {
     }
 
     #[test]
-    fn if_statement() -> anyhow::Result<(), error::Error> {
+    fn if_statement() -> anyhow::Result<(), error::ParseError> {
         let if_statement = parse("if ( true ) { print 5; }")?;
 
         assert_eq!(
@@ -591,7 +601,7 @@ mod tests {
     }
 
     #[test]
-    fn multiple_statements() -> anyhow::Result<(), error::Error> {
+    fn multiple_statements() -> anyhow::Result<(), error::ParseError> {
         let stmts = parse(
             r#"var all_tests_passed;
            if (true) {
@@ -637,7 +647,7 @@ mod tests {
     }
 
     #[test]
-    fn logical_or() -> anyhow::Result<(), error::Error> {
+    fn logical_or() -> anyhow::Result<(), error::ParseError> {
         let stmts = parse("false and true;")?;
 
         assert_eq!(
@@ -660,7 +670,7 @@ mod tests {
     }
 
     #[test]
-    fn while_loop() -> anyhow::Result<(), error::Error> {
+    fn while_loop() -> anyhow::Result<(), error::ParseError> {
         let stmts = parse("while (i < 5) i = i + 1;")?;
 
         assert_eq!(
@@ -713,7 +723,7 @@ mod tests {
     }
 
     #[test]
-    fn for_loop() -> anyhow::Result<(), error::Error> {
+    fn for_loop() -> anyhow::Result<(), error::ParseError> {
         //   for (var i = 0; i < 10; i = i + 1) print i;
         // Desugars to:
         //   {

@@ -10,13 +10,13 @@ pub mod eval;
 pub mod parser;
 pub mod scanner;
 
-fn run(source: &str, interpreter: &mut Interpreter) -> anyhow::Result<(), error::Error> {
+fn run(source: &str, interpreter: &mut Interpreter) -> anyhow::Result<(), error::ParseError> {
     let stmts = parser::parse(source)?;
     interpreter.interpret(stmts);
     Ok(())
 }
 
-fn run_file(filename: &str) -> anyhow::Result<(), error::Error> {
+fn run_file(filename: &str) -> anyhow::Result<(), error::ParseError> {
     let mut file = File::open(filename)?;
     let mut contents = String::new();
     let mut interpreter = Interpreter::new();
@@ -25,7 +25,7 @@ fn run_file(filename: &str) -> anyhow::Result<(), error::Error> {
     Ok(())
 }
 
-fn run_prompt() -> anyhow::Result<(), error::Error> {
+fn run_prompt() -> anyhow::Result<(), error::ParseError> {
     let mut interpreter = Interpreter::new();
     loop {
         print!("> ");
