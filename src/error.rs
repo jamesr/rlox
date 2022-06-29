@@ -75,12 +75,12 @@ impl From<(&str, Location)> for ParseError {
     }
 }
 
-impl From<std::io::Error> for ParseError {
+impl From<std::io::Error> for Error {
     fn from(e: std::io::Error) -> Self {
-        ParseError {
+        Error::Parse(ParseError {
             message: format!("I/O error {}", e.to_string()),
             ..Default::default()
-        }
+        })
     }
 }
 
@@ -122,5 +122,18 @@ impl From<ParseError> for Error {
 impl From<RuntimeError> for Error {
     fn from(e: RuntimeError) -> Self {
         Error::Runtime(e)
+    }
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::Parse(p) => write!(
+                f,
+                "{}\nline {} col {}..{}",
+                p.message, p.loc.line, p.loc.col.start, p.loc.col.end
+            ),
+            Error::Runtime(r) => write!(f, "{}", r.message),
+        }
     }
 }

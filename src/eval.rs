@@ -1,10 +1,10 @@
 use std::fmt::Display;
 
 use crate::{
-    ast::{self, Visitor},
-    env,
+    ast, env,
     error::RuntimeError,
     scanner::{self, Token, TokenValue},
+    visitor::Visitor,
 };
 
 #[derive(Debug, PartialEq, Clone)]
@@ -30,7 +30,8 @@ pub struct Interpreter {
     env: Box<env::Env>,
 }
 
-type InterpreterResult = anyhow::Result<Value, RuntimeError>;
+type ExprResult = anyhow::Result<Value, RuntimeError>;
+type StmtResult = anyhow::Result<(), RuntimeError>;
 
 impl Interpreter {
     pub fn new() -> Interpreter {
@@ -39,13 +40,14 @@ impl Interpreter {
         }
     }
 
-    pub fn interpret<'a>(&mut self, stmts: Vec<Box<ast::Stmt<'a>>>) {
+    pub fn interpret<'a>(&mut self, stmts: Vec<Box<ast::Stmt<'a>>>) -> StmtResult {
         for s in stmts {
-            self.visit_stmt(&*s)
+            self.visit_stmt(&*s)?;
         }
+        Ok(())
     }
 
-    pub fn interpret_expr(&mut self, e: &ast::Expr) -> InterpreterResult {
+    pub fn interpret_expr(&mut self, e: &ast::Expr) -> ExprResult {
         self.visit_expr(e)
     }
 }
@@ -65,8 +67,15 @@ fn as_number(v: &Value) -> anyhow::Result<f64, RuntimeError> {
     }
 }
 
-impl ast::Visitor<InterpreterResult> for Interpreter {
-    fn visit_literal(&mut self, v: &scanner::TokenValue) -> InterpreterResult {
+impl Visitor<ExprResult, StmtResult> for Interpreter {
+    fn expr_result_to_stmt_result(&self, e: ExprResult) -> StmtResult {
+        match e {
+            Ok(_) => Ok(()),
+            Err(e) => Err(e),
+        }
+    }
+
+    fn visit_literal(&mut self, v: &scanner::TokenValue) -> ExprResult {
         Ok(match v {
             TokenValue::String(s) => Value::String(s.to_string()),
             TokenValue::Number(n) => Value::Number(*n),
@@ -75,7 +84,7 @@ impl ast::Visitor<InterpreterResult> for Interpreter {
         })
     }
 
-    fn visit_binary_expr(&mut self, e: &ast::BinaryExpr) -> InterpreterResult {
+    fn visit_binary_expr(&mut self, e: &ast::BinaryExpr) -> ExprResult {
         let left = self.visit_expr(&e.left)?;
         let right = self.visit_expr(&e.right)?;
 
@@ -113,11 +122,11 @@ impl ast::Visitor<InterpreterResult> for Interpreter {
         }
     }
 
-    fn visit_grouping_expr(&mut self, e: &ast::Expr) -> InterpreterResult {
+    fn visit_grouping_expr(&mut self, e: &ast::Expr) -> ExprResult {
         self.visit_expr(e)
     }
 
-    fn visit_unary_expr(&mut self, e: &ast::UnaryExpr) -> InterpreterResult {
+    fn visit_unary_expr(&mut self, e: &ast::UnaryExpr) -> ExprResult {
         use scanner::TokenType::*;
         let val = self.visit_expr(&e.right)?;
         match e.operator.token_type {
@@ -130,17 +139,17 @@ impl ast::Visitor<InterpreterResult> for Interpreter {
         }
     }
 
-    fn visit_variable(&mut self, t: &Token) -> InterpreterResult {
+    fn visit_variable(&mut self, t: &Token) -> ExprResult {
         self.env.get(t.lexeme.to_string())
     }
 
-    fn visit_assign(&mut self, a: &ast::AssignExpr) -> InterpreterResult {
+    fn visit_assign(&mut self, a: &ast::AssignExpr) -> ExprResult {
         let value = self.visit_expr(&*a.value)?;
         self.env.assign(a.name.lexeme.to_string(), value.clone())?;
         Ok(value)
     }
 
-    fn visit_logical(&mut self, l: &ast::LogicalExpr) -> InterpreterResult {
+    fn visit_logical(&mut self, l: &ast::LogicalExpr) -> ExprResult {
         let left = self.visit_expr(&l.left).ok().unwrap();
 
         if l.operator.token_type == scanner::TokenType::Or {
@@ -156,43 +165,48 @@ impl ast::Visitor<InterpreterResult> for Interpreter {
         self.visit_expr(&l.right)
     }
 
-    fn visit_block(&mut self, v: &Vec<Box<ast::Stmt>>) {
+    fn visit_block(&mut self, v: &Vec<Box<ast::Stmt>>) -> StmtResult {
         self.env.push_block();
         for s in v {
-            self.visit_stmt(s);
+            self.visit_stmt(s)?;
         }
         self.env.pop_block();
+        Ok(())
     }
 
-    fn visit_print_stmt(&mut self, e: &ast::Expr) {
-        // XXX propagate error
-        println!("{}", self.interpret_expr(e).unwrap());
+    fn visit_print_stmt(&mut self, e: &ast::Expr) -> StmtResult {
+        println!("{}", self.interpret_expr(e)?);
+        Ok(())
     }
-    fn visit_var_decl_stmt(&mut self, v: &ast::VarDecl) {
+
+    fn visit_var_decl_stmt(&mut self, v: &ast::VarDecl) -> StmtResult {
         let initial = match &v.initializer {
-            Some(expr) => self.visit_expr(&expr).unwrap(),
+            Some(expr) => self.visit_expr(&expr)?,
             None => Value::Nil,
         };
 
         self.env.define(v.name.lexeme.to_string(), initial);
+        Ok(())
     }
 
-    fn visit_if_stmt(&mut self, i: &ast::IfStmt) {
-        let condition = self.visit_expr(&i.condition);
+    fn visit_if_stmt(&mut self, i: &ast::IfStmt) -> StmtResult {
+        let condition = self.visit_expr(&i.condition)?;
 
-        if truthy(&condition.ok().unwrap()) {
-            self.visit_stmt(&i.then_branch);
+        if truthy(&condition) {
+            self.visit_stmt(&i.then_branch)?;
         } else {
             if let Some(s) = &i.else_branch {
-                self.visit_stmt(s);
+                self.visit_stmt(s)?;
             }
         }
+        Ok(())
     }
 
-    fn visit_while_stmt(&mut self, w: &ast::WhileStmt) {
-        while truthy(&self.visit_expr(&w.condition).ok().unwrap()) {
-            self.visit_stmt(&w.body);
+    fn visit_while_stmt(&mut self, w: &ast::WhileStmt) -> StmtResult {
+        while truthy(&self.visit_expr(&w.condition)?) {
+            self.visit_stmt(&w.body)?;
         }
+        Ok(())
     }
 }
 
@@ -244,12 +258,12 @@ mod tests {
                 let mut interpreter = Interpreter::new();
 
                 let stmts = crate::parser::parse($source)?;
-                let mut printer = crate::ast::AstPrinter {};
+                let mut printer = crate::visitor::AstPrinter {};
                 for stmt in &stmts {
-                    use crate::ast::Visitor;
+                    use crate::visitor::Visitor;
                     printer.visit_stmt(&stmt);
                 }
-                interpreter.interpret(stmts);
+                interpreter.interpret(stmts)?;
 
                 let all_tests_passed_expr = crate::parser::parse_expression("all_tests_passed")?;
                 let result = interpreter.interpret_expr(&all_tests_passed_expr)?;
