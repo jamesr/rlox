@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::{
     ast, env,
-    error::RuntimeError,
+    error::{self, RuntimeError},
     scanner::{self, Token, TokenValue},
     visitor::Visitor,
 };
@@ -28,6 +28,7 @@ impl Display for Value {
 
 pub struct Interpreter {
     env: Box<env::Env>,
+    errors: Vec<error::Error>,
 }
 
 type ExprResult = anyhow::Result<Value, RuntimeError>;
@@ -37,6 +38,7 @@ impl Interpreter {
     pub fn new() -> Interpreter {
         Interpreter {
             env: Box::new(env::Env::new()),
+            errors: vec![],
         }
     }
 
@@ -49,6 +51,13 @@ impl Interpreter {
 
     pub fn interpret_expr(&mut self, e: &ast::Expr) -> ExprResult {
         self.visit_expr(e)
+    }
+
+    pub fn has_error(&self) -> bool {
+        !self.errors.is_empty()
+    }
+    pub fn errors(&self) -> &[error::Error] {
+        &self.errors
     }
 }
 
@@ -73,6 +82,10 @@ impl Visitor<ExprResult, StmtResult> for Interpreter {
             Ok(_) => Ok(()),
             Err(e) => Err(e),
         }
+    }
+
+    fn report_error(&mut self, e: error::Error) {
+        self.errors.push(e)
     }
 
     fn visit_literal(&mut self, v: &scanner::TokenValue) -> ExprResult {
@@ -254,10 +267,15 @@ mod tests {
     macro_rules! eval_string_stmts_test {
         ($name:ident, $source:expr) => {
             #[test]
-            fn $name() -> anyhow::Result<(), error::Error> {
+            fn $name() -> anyhow::Result<(), anyhow::Error> {
                 let mut interpreter = Interpreter::new();
 
-                let stmts = crate::parser::parse($source)?;
+                let stmts = match crate::parser::parse($source) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        return Err(error::convert_parse(&e));
+                    }
+                };
                 let mut printer = crate::visitor::AstPrinter {};
                 for stmt in &stmts {
                     use crate::visitor::Visitor;

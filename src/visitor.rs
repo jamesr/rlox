@@ -1,7 +1,8 @@
-use crate::{ast::*, scanner::*};
+use crate::{ast::*, error, scanner::*};
 
 pub trait Visitor<ExprResult, StmtResult> {
     fn expr_result_to_stmt_result(&self, e: ExprResult) -> StmtResult;
+    fn report_error(&mut self, _: error::Error) {}
 
     fn visit_literal(&mut self, v: &TokenValue) -> ExprResult;
     fn visit_expr(&mut self, e: &Expr) -> ExprResult {

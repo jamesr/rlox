@@ -12,16 +12,11 @@ pub struct Location {
 pub struct ParseError {
     pub message: String,
     pub loc: Location,
-    pub recoverable: bool,
 }
 
 impl ParseError {
-    pub fn new(message: String, loc: Location, recoverable: bool) -> ParseError {
-        ParseError {
-            message,
-            loc,
-            recoverable,
-        }
+    pub fn new(message: String, loc: Location) -> ParseError {
+        ParseError { message, loc }
     }
 }
 
@@ -60,7 +55,6 @@ impl From<(String, Location)> for ParseError {
         ParseError {
             message: t.0,
             loc: t.1,
-            recoverable: false,
         }
     }
 }
@@ -70,8 +64,17 @@ impl From<(&str, Location)> for ParseError {
         ParseError {
             message: t.0.to_string(),
             loc: t.1,
-            recoverable: false,
         }
+    }
+}
+
+impl std::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}\nline {} col {}..{}",
+            self.message, self.loc.line, self.loc.col.start, self.loc.col.end
+        )
     }
 }
 
@@ -107,6 +110,12 @@ impl From<&str> for RuntimeError {
     }
 }
 
+impl From<RuntimeError> for anyhow::Error {
+    fn from(e: RuntimeError) -> Self {
+        anyhow!(e.message)
+    }
+}
+
 #[derive(Debug)]
 pub enum Error {
     Parse(ParseError),
@@ -125,14 +134,22 @@ impl From<RuntimeError> for Error {
     }
 }
 
+pub fn convert_parse(v: &[ParseError]) -> anyhow::Error {
+    anyhow!(v
+        .iter()
+        .fold(String::new(), |s, e| s + &e.to_string() + "\n"))
+}
+
+pub fn convert(v: &[Error]) -> anyhow::Error {
+    anyhow!(v
+        .iter()
+        .fold(String::new(), |s, e| s + &e.to_string() + "\n"))
+}
+
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::Parse(p) => write!(
-                f,
-                "{}\nline {} col {}..{}",
-                p.message, p.loc.line, p.loc.col.start, p.loc.col.end
-            ),
+            Error::Parse(p) => write!(f, "{}", p.to_string()),
             Error::Runtime(r) => write!(f, "{}", r.message),
         }
     }

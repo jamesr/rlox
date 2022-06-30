@@ -8,6 +8,7 @@ struct ParserState<'a> {
     scanner: Scanner<'a>,
     current: Option<Token<'a>>,
     prev: Option<Token<'a>>,
+    errors: Vec<error::ParseError>,
 }
 pub struct Parser<'a> {
     state: RefCell<ParserState<'a>>,
@@ -16,6 +17,7 @@ pub struct Parser<'a> {
 type ExprResult<'a> = anyhow::Result<Box<ast::Expr<'a>>, error::ParseError>;
 type StmtResult<'a> = anyhow::Result<Box<ast::Stmt<'a>>, error::ParseError>;
 type StmtsResult<'a> = anyhow::Result<Vec<Box<ast::Stmt<'a>>>, error::ParseError>;
+type ParseResult<'a> = anyhow::Result<Vec<Box<ast::Stmt<'a>>>, Vec<error::ParseError>>;
 
 impl<'a> Parser<'a> {
     pub fn new(scanner: Scanner<'a>) -> Parser<'a> {
@@ -24,6 +26,7 @@ impl<'a> Parser<'a> {
                 scanner,
                 current: None,
                 prev: None,
+                errors: vec![],
             }),
         }
     }
@@ -34,10 +37,21 @@ impl<'a> Parser<'a> {
         self.expression()
     }
 
-    pub fn parse(&mut self) -> StmtsResult<'a> {
-        self.prime()?;
+    pub fn parse(&mut self) -> ParseResult<'a> {
+        if let Err(e) = self.prime() {
+            return Err(vec![e]);
+        }
 
-        self.program()
+        let stmts = match self.program() {
+            Ok(s) => s,
+            Err(e) => return Err(vec![e]),
+        };
+
+        let errors = std::mem::take(&mut self.state.borrow_mut().errors);
+        if !errors.is_empty() {
+            return Err(errors);
+        }
+        Ok(stmts)
     }
 
     // program → declaration* EOF ;
@@ -476,7 +490,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-pub fn parse<'a>(source: &'a str) -> StmtsResult<'a> {
+pub fn parse<'a>(source: &'a str) -> ParseResult<'a> {
     let scanner = Scanner::new(source);
     let mut parser = Parser::new(scanner);
     parser.parse()
@@ -569,7 +583,7 @@ mod tests {
     }
 
     #[test]
-    fn block() -> anyhow::Result<(), error::ParseError> {
+    fn block() -> anyhow::Result<(), Vec<error::ParseError>> {
         let block = parse("{ 5; }")?;
 
         assert_eq!(
@@ -583,7 +597,7 @@ mod tests {
     }
 
     #[test]
-    fn if_statement() -> anyhow::Result<(), error::ParseError> {
+    fn if_statement() -> anyhow::Result<(), Vec<error::ParseError>> {
         let if_statement = parse("if ( true ) { print 5; }")?;
 
         assert_eq!(
@@ -601,7 +615,7 @@ mod tests {
     }
 
     #[test]
-    fn multiple_statements() -> anyhow::Result<(), error::ParseError> {
+    fn multiple_statements() -> anyhow::Result<(), Vec<error::ParseError>> {
         let stmts = parse(
             r#"var all_tests_passed;
            if (true) {
@@ -647,7 +661,7 @@ mod tests {
     }
 
     #[test]
-    fn logical_or() -> anyhow::Result<(), error::ParseError> {
+    fn logical_or() -> anyhow::Result<(), Vec<error::ParseError>> {
         let stmts = parse("false and true;")?;
 
         assert_eq!(
@@ -670,7 +684,7 @@ mod tests {
     }
 
     #[test]
-    fn while_loop() -> anyhow::Result<(), error::ParseError> {
+    fn while_loop() -> anyhow::Result<(), Vec<error::ParseError>> {
         let stmts = parse("while (i < 5) i = i + 1;")?;
 
         assert_eq!(
@@ -723,7 +737,7 @@ mod tests {
     }
 
     #[test]
-    fn for_loop() -> anyhow::Result<(), error::ParseError> {
+    fn for_loop() -> anyhow::Result<(), Vec<error::ParseError>> {
         //   for (var i = 0; i < 10; i = i + 1) print i;
         // Desugars to:
         //   {

@@ -141,7 +141,7 @@ impl<'a> Scanner<'a> {
     }
 
     pub fn error(&self, message: String) -> error::ParseError {
-        error::ParseError::new(message, self.loc(), false)
+        error::ParseError::new(message, self.loc())
     }
 
     pub fn cols(&self) -> Range<usize> {
