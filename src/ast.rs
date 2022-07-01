@@ -9,6 +9,7 @@ pub enum Expr<'a> {
     Variable(Token<'a>),
     Assign(AssignExpr<'a>),
     Logical(LogicalExpr<'a>),
+    Call(CallExpr<'a>),
 }
 
 #[derive(PartialEq, Debug)]
@@ -35,6 +36,13 @@ pub struct LogicalExpr<'a> {
     pub left: Box<Expr<'a>>,
     pub operator: Token<'a>,
     pub right: Box<Expr<'a>>,
+}
+
+#[derive(PartialEq, Debug)]
+pub struct CallExpr<'a> {
+    pub callee: Box<Expr<'a>>,
+    pub paren: Token<'a>,
+    pub args: Vec<Box<Expr<'a>>>,
 }
 
 #[derive(PartialEq, Debug)]

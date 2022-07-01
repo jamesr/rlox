@@ -15,6 +15,7 @@ pub trait Visitor<ExprResult, StmtResult> {
             Variable(t) => self.visit_variable(t),
             Assign(a) => self.visit_assign(a),
             Logical(a) => self.visit_logical(a),
+            Call(c) => self.visit_call(c),
         }
     }
     fn visit_binary_expr(&mut self, e: &BinaryExpr) -> ExprResult;
@@ -23,6 +24,7 @@ pub trait Visitor<ExprResult, StmtResult> {
     fn visit_variable(&mut self, t: &Token) -> ExprResult;
     fn visit_assign(&mut self, a: &AssignExpr) -> ExprResult;
     fn visit_logical(&mut self, l: &LogicalExpr) -> ExprResult;
+    fn visit_call(&mut self, c: &CallExpr) -> ExprResult;
 
     fn visit_stmt(&mut self, s: &Stmt) -> StmtResult {
         use Stmt::*;
@@ -92,6 +94,17 @@ impl Visitor<String, String> for AstPrinter {
             self.visit_expr(&l.left),
             l.operator.lexeme,
             self.visit_expr(&l.right)
+        )
+    }
+    fn visit_call(&mut self, c: &CallExpr) -> String {
+        format!(
+            "call ( {} ) ( {} )",
+            self.visit_expr(&c.callee),
+            c.args
+                .iter()
+                .map(|e| self.visit_expr(e))
+                .collect::<Vec<_>>()
+                .join(",")
         )
     }
 

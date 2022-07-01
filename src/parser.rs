@@ -336,7 +336,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    // unary → ( "!" | "-" ) unary | primary ;
+    // unary → ( "!" | "-" ) unary | call ;
     fn unary(&self) -> ExprResult<'a> {
         if self.matches(&[TokenType::Bang, TokenType::Minus])? {
             let operator = self.previous();
@@ -346,7 +346,48 @@ impl<'a> Parser<'a> {
                 right,
             })));
         }
-        self.primary()
+        self.call()
+    }
+
+    // call → primary ( "(" arguments? ")" )* ;
+    fn call(&self) -> ExprResult<'a> {
+        let mut expr = self.primary()?;
+
+        loop {
+            if self.matches(&[TokenType::LeftParen])? {
+                expr = self.finish_call(expr)?;
+            } else {
+                break;
+            }
+        }
+
+        Ok(expr)
+    }
+
+    // arguments → expression ( "," expression )* ;
+    fn finish_call(&self, callee: Box<ast::Expr<'a>>) -> ExprResult<'a> {
+        let mut args = vec![];
+
+        if !self.check(TokenType::RightParen) {
+            loop {
+                if args.len() >= 255 {
+                    self.add_error(self.error("Can't have more than 255 arguments".to_string()));
+                }
+                args.push(self.expression()?);
+                if !self.matches(&[TokenType::Comma])? {
+                    break;
+                }
+            }
+        }
+
+        self.consume(TokenType::RightParen, "Expect ')' after arguments.")?;
+        let paren = self.previous().unwrap();
+
+        Ok(Box::new(ast::Expr::Call(ast::CallExpr {
+            callee,
+            paren,
+            args,
+        })))
     }
 
     // primary  → "true" | "false" | "nil"
@@ -831,6 +872,35 @@ mod tests {
                     ])),
                 },))
             ]))]
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn call_expression() -> anyhow::Result<()> {
+        let expr = parse_expression("callback(5, true)")?;
+
+        assert_eq!(
+            expr,
+            Box::new(ast::Expr::Call(CallExpr {
+                callee: Box::new(ast::Expr::Variable(Token {
+                    token_type: TokenType::Identifier,
+                    lexeme: "callback",
+                    value: None,
+                    line: 0
+                })),
+                paren: Token {
+                    token_type: TokenType::RightParen,
+                    lexeme: ")",
+                    value: None,
+                    line: 0
+                },
+                args: vec![
+                    Box::new(ast::Expr::Literal(TokenValue::Number(5.0))),
+                    Box::new(ast::Expr::Literal(TokenValue::Bool(true))),
+                ],
+            }))
         );
 
         Ok(())

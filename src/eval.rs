@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, rc::Rc, time::Instant};
 
 use crate::{
     ast, env,
@@ -7,11 +7,22 @@ use crate::{
     visitor::Visitor,
 };
 
+pub trait Callable: std::fmt::Debug {
+    fn call(
+        &self,
+        interpreter: &mut Interpreter,
+        args: Vec<Value>,
+    ) -> anyhow::Result<Value, RuntimeError>;
+
+    fn arity(&self) -> usize;
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Value {
     String(String),
     Number(f64),
     Bool(bool),
+    Callable(by_address::ByAddress<Rc<dyn Callable>>),
     Nil,
 }
 
@@ -21,6 +32,7 @@ impl Display for Value {
             Value::String(s) => write!(f, "\"{}\"", s),
             Value::Number(n) => write!(f, "{}", n),
             Value::Bool(b) => write!(f, "{}", b),
+            Value::Callable(_) => write!(f, "<fn>"),
             Value::Nil => write!(f, "nil"),
         }
     }
@@ -36,10 +48,17 @@ type StmtResult = anyhow::Result<(), RuntimeError>;
 
 impl Interpreter {
     pub fn new() -> Interpreter {
-        Interpreter {
+        let mut interpreter = Interpreter {
             env: Box::new(env::Env::new()),
             errors: vec![],
-        }
+        };
+
+        interpreter.globals().define(
+            "clock".to_string(),
+            Value::Callable(by_address::ByAddress(Rc::new(Clock::new()))),
+        );
+
+        interpreter
     }
 
     pub fn interpret<'a>(&mut self, stmts: Vec<Box<ast::Stmt<'a>>>) -> StmtResult {
@@ -56,8 +75,39 @@ impl Interpreter {
     pub fn has_error(&self) -> bool {
         !self.errors.is_empty()
     }
+
     pub fn errors(&self) -> &[error::Error] {
         &self.errors
+    }
+
+    fn globals(&mut self) -> &mut env::Env {
+        &mut self.env
+    }
+}
+
+#[derive(Debug)]
+struct Clock {
+    start: Instant,
+}
+
+impl Clock {
+    fn new() -> Clock {
+        Clock {
+            start: Instant::now(),
+        }
+    }
+}
+
+impl Callable for Clock {
+    fn call(
+        &self,
+        _interpreter: &mut Interpreter,
+        _args: Vec<Value>,
+    ) -> anyhow::Result<Value, RuntimeError> {
+        Ok(Value::Number(self.start.elapsed().as_secs_f64()))
+    }
+    fn arity(&self) -> usize {
+        0
     }
 }
 
@@ -95,6 +145,29 @@ impl Visitor<ExprResult, StmtResult> for Interpreter {
             TokenValue::Bool(b) => Value::Bool(*b),
             TokenValue::Nil => Value::Nil,
         })
+    }
+    fn visit_call(&mut self, c: &ast::CallExpr) -> ExprResult {
+        let callee = self.visit_expr(&c.callee)?;
+
+        let args_result: Result<Vec<Value>, error::RuntimeError> =
+            c.args.iter().map(|e| self.visit_expr(e)).collect();
+
+        let args = args_result?;
+
+        if let Value::Callable(c) = callee {
+            if args.len() != c.arity() {
+                return Err(error::RuntimeError::new(format!(
+                    "Expected {} arguments but got {}.",
+                    c.arity(),
+                    args.len()
+                )));
+            }
+            return Ok(c.call(self, args)?);
+        } else {
+            return Err(error::RuntimeError::new(
+                "Can only call functions.".to_string(),
+            ));
+        }
     }
 
     fn visit_binary_expr(&mut self, e: &ast::BinaryExpr) -> ExprResult {
@@ -337,5 +410,13 @@ mod tests {
         i = i + 1;
     }
     var all_tests_passed = i == 5;"#
+    );
+
+    eval_string_stmts_test!(
+        clock,
+        r#"var start = clock();
+        for (var i = 0; i < 100; i = i + 1) { }
+        var end = clock();
+        var all_tests_passed = end >= start;"#
     );
 }
