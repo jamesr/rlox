@@ -67,13 +67,19 @@ impl<'a> Parser<'a> {
 
     // declaration → varDecl | statement ;
     fn declaration(&self) -> StmtResult<'a> {
-        // TODO - synchronize on errors here
+        match (|| {
+            if self.matches(&[TokenType::Var])? {
+                return self.var_decl();
+            }
 
-        if self.matches(&[TokenType::Var])? {
-            return self.var_decl();
+            self.statement()
+        })() {
+            Ok(s) => Ok(s),
+            Err(e) => {
+                self.synchronize();
+                Err(e)
+            }
         }
-
-        self.statement()
     }
 
     // varDecl → "var" IDENTIFIER ( "=" expression )? ";" ;
@@ -133,6 +139,10 @@ impl<'a> Parser<'a> {
         self.state.borrow().scanner.error(message)
     }
 
+    fn add_error(&self, e: error::ParseError) {
+        self.state.borrow_mut().errors.push(e);
+    }
+
     fn advance(&self) -> anyhow::Result<(), error::ParseError> {
         let mut current = self.state.borrow_mut().current.take();
         self.state.borrow_mut().prev = current.take();
@@ -168,11 +178,36 @@ impl<'a> Parser<'a> {
         )))
     }
 
-    /*
     fn synchronize(&self) {
-        self.advance()
+        if let Err(e) = self.advance() {
+            self.add_error(e);
+        }
+
+        while !self.at_end() {
+            if self.previous().unwrap().token_type == TokenType::Semicolon {
+                return;
+            }
+
+            match self.peek().unwrap().token_type {
+                // Look for a statement-like token.
+                TokenType::Class
+                | TokenType::Fun
+                | TokenType::Var
+                | TokenType::For
+                | TokenType::If
+                | TokenType::While
+                | TokenType::Print
+                | TokenType::Return => {
+                    return;
+                }
+                _ => {
+                    if let Err(e) = self.advance() {
+                        self.add_error(e);
+                    }
+                }
+            }
+        }
     }
-    */
 
     // expression → assignment ;
     fn expression(&self) -> ExprResult<'a> {
