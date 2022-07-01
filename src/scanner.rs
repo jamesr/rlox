@@ -78,6 +78,17 @@ pub struct Token<'a> {
     pub line: usize,
 }
 
+impl<'a> Token<'a> {
+    pub fn identifier(name: &'a str) -> Token<'a> {
+        Token {
+            token_type: TokenType::Identifier,
+            lexeme: name,
+            value: None,
+            line: 0,
+        }
+    }
+}
+
 impl<'a> fmt::Display for Token<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_fmt(format_args!(

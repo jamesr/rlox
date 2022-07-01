@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use crate::ast::{AssignExpr, IfStmt, LogicalExpr, WhileStmt};
+use crate::ast::{AssignExpr, FunctionStmt, IfStmt, LogicalExpr, WhileStmt};
 use crate::scanner::{Scanner, Token, TokenType, TokenValue};
 use crate::{ast, error};
 
@@ -65,9 +65,13 @@ impl<'a> Parser<'a> {
         Ok(statements)
     }
 
-    // declaration → varDecl | statement ;
+    // declaration → funDecl | varDecl | statement ;
     fn declaration(&self) -> StmtResult<'a> {
         match (|| {
+            if self.matches(&[TokenType::Fun])? {
+                return self.fun_decl("function");
+            }
+
             if self.matches(&[TokenType::Var])? {
                 return self.var_decl();
             }
@@ -80,6 +84,48 @@ impl<'a> Parser<'a> {
                 Err(e)
             }
         }
+    }
+
+    // funDecl → "fun" function ;
+    // function → IDENTIFIER "(" parameters? ")" block ;
+    // parameters → IDENTIFIER ( "," IDENTIFIER )* ;
+    fn fun_decl(&self, kind: &str) -> StmtResult<'a> {
+        self.consume(TokenType::Identifier, &format!("Expect {} name.", kind))?;
+        let name = self.previous().unwrap();
+        self.consume(
+            TokenType::LeftParen,
+            &format!("Expect '(' after {} name.", kind),
+        )?;
+
+        let mut params = vec![];
+        if !self.check(TokenType::RightParen) {
+            loop {
+                if params.len() >= 255 {
+                    return Err(self.error("Can't have more than 255 parameters.".to_string()));
+                }
+
+                self.consume(TokenType::Identifier, "Expect parameter name.")?;
+                params.push(self.previous().unwrap());
+
+                if !self.matches(&[TokenType::Comma])? {
+                    break;
+                }
+            }
+        }
+        self.consume(TokenType::RightParen, "Expect ')' after parameters.")?;
+
+        self.consume(
+            TokenType::LeftBrace,
+            &format!("Expect '{{' before {} body.", kind),
+        )?;
+
+        let body = self.block()?;
+
+        Ok(Box::new(ast::Stmt::Function(FunctionStmt {
+            name,
+            params,
+            body,
+        })))
     }
 
     // varDecl → "var" IDENTIFIER ( "=" expression )? ";" ;
@@ -900,6 +946,34 @@ mod tests {
                     Box::new(ast::Expr::Literal(TokenValue::Number(5.0))),
                     Box::new(ast::Expr::Literal(TokenValue::Bool(true))),
                 ],
+            }))
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn function_definition() -> anyhow::Result<(), Vec<error::ParseError>> {
+        let source = "fun add(a, b) { print a + b; }";
+        let stmts = parse(source)?;
+
+        assert_eq!(
+            stmts[0],
+            Box::new(ast::Stmt::Function(ast::FunctionStmt {
+                name: Token::identifier("add"),
+                params: vec![Token::identifier("a"), Token::identifier("b"),],
+                body: vec![Box::new(ast::Stmt::Print(Box::new(ast::Expr::Binary(
+                    BinaryExpr {
+                        left: Box::new(ast::Expr::Variable(Token::identifier("a"))),
+                        operator: Token {
+                            token_type: TokenType::Plus,
+                            lexeme: "+",
+                            value: None,
+                            line: 0
+                        },
+                        right: Box::new(ast::Expr::Variable(Token::identifier("b")))
+                    }
+                ))))],
             }))
         );
 

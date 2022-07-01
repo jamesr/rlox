@@ -294,6 +294,10 @@ impl Visitor<ExprResult, StmtResult> for Interpreter {
         }
         Ok(())
     }
+
+    fn visit_function_stmt(&mut self, f: &ast::FunctionStmt) -> StmtResult {
+        Ok(())
+    }
 }
 
 #[cfg(test)]

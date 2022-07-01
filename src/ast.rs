@@ -53,6 +53,7 @@ pub enum Stmt<'a> {
     Var(VarDecl<'a>),
     If(IfStmt<'a>),
     While(WhileStmt<'a>),
+    Function(FunctionStmt<'a>),
 }
 
 #[derive(PartialEq, Debug)]
@@ -72,4 +73,11 @@ pub struct IfStmt<'a> {
 pub struct WhileStmt<'a> {
     pub condition: Box<Expr<'a>>,
     pub body: Box<Stmt<'a>>,
+}
+
+#[derive(PartialEq, Debug)]
+pub struct FunctionStmt<'a> {
+    pub name: Token<'a>,
+    pub params: Vec<Token<'a>>,
+    pub body: Vec<Box<Stmt<'a>>>,
 }
