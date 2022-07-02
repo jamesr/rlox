@@ -2,6 +2,8 @@ use std::ops::Range;
 
 use anyhow::anyhow;
 
+use crate::eval;
+
 #[derive(Default, Debug)]
 pub struct Location {
     pub line: usize,
@@ -88,13 +90,14 @@ impl From<std::io::Error> for Error {
 }
 
 #[derive(Debug)]
-pub struct RuntimeError {
-    message: String,
+pub enum RuntimeError {
+    Message(String),
+    Return(eval::Value),
 }
 
 impl RuntimeError {
     pub fn new(message: String) -> Self {
-        Self { message }
+        Self::Message(message)
     }
 }
 
@@ -110,9 +113,18 @@ impl From<&str> for RuntimeError {
     }
 }
 
+impl std::fmt::Display for RuntimeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RuntimeError::Message(m) => write!(f, "{}", m),
+            RuntimeError::Return(v) => write!(f, "return {}", v),
+        }
+    }
+}
+
 impl From<RuntimeError> for anyhow::Error {
     fn from(e: RuntimeError) -> Self {
-        anyhow!(e.message)
+        anyhow!(e)
     }
 }
 
@@ -150,7 +162,7 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::Parse(p) => write!(f, "{}", p.to_string()),
-            Error::Runtime(r) => write!(f, "{}", r.message),
+            Error::Runtime(r) => write!(f, "{}", r),
         }
     }
 }

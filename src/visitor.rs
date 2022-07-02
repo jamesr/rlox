@@ -36,6 +36,7 @@ pub trait Visitor<ExprResult, StmtResult> {
                 return self.expr_result_to_stmt_result(expr_result);
             }
             Print(e) => self.visit_print_stmt(e),
+            Return(r) => self.visit_return_stmt(r),
             Block(v) => self.visit_block(v),
             Var(v) => self.visit_var_decl_stmt(v),
             If(i) => self.visit_if_stmt(i),
@@ -46,6 +47,7 @@ pub trait Visitor<ExprResult, StmtResult> {
 
     fn visit_block(&mut self, v: &Vec<Box<Stmt>>) -> StmtResult;
     fn visit_print_stmt(&mut self, e: &Expr) -> StmtResult;
+    fn visit_return_stmt(&mut self, r: &Option<Box<Expr>>) -> StmtResult;
     fn visit_var_decl_stmt(&mut self, v: &VarDecl) -> StmtResult;
     fn visit_if_stmt(&mut self, i: &IfStmt) -> StmtResult;
     fn visit_while_stmt(&mut self, w: &WhileStmt) -> StmtResult;
@@ -119,6 +121,12 @@ impl Visitor<String, String> for AstPrinter {
     }
     fn visit_print_stmt(&mut self, e: &Expr) -> String {
         format!("{} ;", self.visit_expr(e))
+    }
+    fn visit_return_stmt(&mut self, r: &Option<Box<Expr>>) -> String {
+        match r {
+            Some(e) => format!("return ( {} );", self.visit_expr(e)),
+            None => format!("return;"),
+        }
     }
     fn visit_var_decl_stmt(&mut self, v: &VarDecl) -> String {
         let mut s = format!("var {}", v.name).to_string();

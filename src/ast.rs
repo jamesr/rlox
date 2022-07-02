@@ -75,6 +75,7 @@ pub struct CallExpr {
 pub enum Stmt {
     Expr(Box<Expr>),
     Print(Box<Expr>),
+    Return(Option<Box<Expr>>),
     Block(Vec<Box<Stmt>>),
     Var(VarDecl),
     If(IfStmt),

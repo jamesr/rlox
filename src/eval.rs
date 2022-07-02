@@ -265,6 +265,14 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
         Ok(())
     }
 
+    fn visit_return_stmt(&mut self, r: &Option<Box<ast::Expr>>) -> StmtResult {
+        let value = match r {
+            Some(e) => self.visit_expr(e)?,
+            None => Value::Nil,
+        };
+        Err(RuntimeError::Return(value))
+    }
+
     fn visit_var_decl_stmt(&mut self, v: &ast::VarDecl) -> StmtResult {
         let initial = match &v.initializer {
             Some(expr) => self.visit_expr(&expr)?,

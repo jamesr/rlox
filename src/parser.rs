@@ -493,6 +493,7 @@ impl<'a> Parser<'a> {
     //           | forStmt
     //           | ifStmt
     //           | printStmt
+    //           | returnStmt
     //           | whileStmt
     //           | block ;
     fn statement(&self) -> StmtResult {
@@ -504,6 +505,9 @@ impl<'a> Parser<'a> {
         }
         if self.matches(&[TokenType::Print])? {
             return self.print_stmt();
+        }
+        if self.matches(&[TokenType::Return])? {
+            return self.return_stmt();
         }
         if self.matches(&[TokenType::While])? {
             return self.while_stmt();
@@ -540,6 +544,18 @@ impl<'a> Parser<'a> {
         let expr = self.expression()?;
         self.consume(TokenType::Semicolon, "Expect ';' after value.")?;
         Ok(Box::new(ast::Stmt::Print(expr)))
+    }
+
+    // returnStmt → "return" expression? ";" ;
+    fn return_stmt(&self) -> StmtResult {
+        let value = if self.check(TokenType::Semicolon) {
+            None
+        } else {
+            Some(self.expression()?)
+        };
+
+        self.consume(TokenType::Semicolon, "Expect ';' after return value.")?;
+        Ok(Box::new(ast::Stmt::Return(value)))
     }
 
     // ifStmt → "if" "(" expression ")" statement
