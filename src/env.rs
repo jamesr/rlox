@@ -1,42 +1,43 @@
-use std::collections::HashMap;
+use std::{
+    cell::RefCell,
+    collections::{hash_map, HashMap},
+    rc::Rc,
+};
 
 use crate::{error::RuntimeError, eval};
 
 type Values = HashMap<String, eval::Value>;
 
 pub struct Env {
-    stack: Vec<Values>,
+    parent: Option<Rc<RefCell<Env>>>,
+    values: Values,
 }
 
 impl Env {
-    pub fn new() -> Self {
-        Self {
-            stack: vec![Values::new()],
+    pub fn new() -> Env {
+        Env {
+            parent: None,
+            values: Values::new(),
         }
     }
 
-    fn top_mut(&mut self) -> &mut Values {
-        self.stack.last_mut().unwrap()
+    pub fn with_parent(parent: Rc<RefCell<Env>>) -> Env {
+        Env {
+            parent: Some(parent),
+            values: Values::new(),
+        }
     }
 
     pub fn define(&mut self, name: String, value: eval::Value) {
-        self.top_mut().insert(name, value);
-    }
-
-    fn find_mut(&mut self, name: &String) -> Option<&mut eval::Value> {
-        for values in self.stack.iter_mut().rev() {
-            if let Some(v) = values.get_mut(name) {
-                return Some(v);
-            }
-        }
-        None
+        self.values.insert(name, value);
     }
 
     fn find(&self, name: &String) -> Option<eval::Value> {
-        for values in self.stack.iter().rev() {
-            if let Some(v) = values.get(name) {
-                return Some(v.clone());
-            }
+        if let Some(v) = self.values.get(name) {
+            return Some(v.clone());
+        }
+        if let Some(parent) = self.parent.clone() {
+            return parent.borrow().find(name);
         }
         None
     }
@@ -49,18 +50,13 @@ impl Env {
     }
 
     pub fn assign(&mut self, name: String, value: eval::Value) -> anyhow::Result<(), RuntimeError> {
-        if let Some(mut_ref) = self.find_mut(&name) {
-            *mut_ref = value;
+        if let hash_map::Entry::Occupied(mut entry) = self.values.entry(name.clone()) {
+            entry.insert(value);
             return Ok(());
         }
+        if let Some(parent) = &self.parent {
+            return parent.borrow_mut().assign(name.clone(), value);
+        }
         Err(format!("Undefined variable '{}'.", name).into())
-    }
-
-    pub fn push_block(&mut self) {
-        self.stack.push(Values::new());
-    }
-
-    pub fn pop_block(&mut self) {
-        self.stack.pop();
     }
 }

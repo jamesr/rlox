@@ -1,4 +1,4 @@
-use std::{fmt::Display, rc::Rc, time::Instant};
+use std::{cell::RefCell, fmt::Display, rc::Rc, time::Instant};
 
 use crate::{
     ast, env,
@@ -39,7 +39,8 @@ impl Display for Value {
 }
 
 pub struct Interpreter {
-    env: Box<env::Env>,
+    env: Rc<RefCell<env::Env>>,
+    globals: Rc<RefCell<env::Env>>,
     errors: Vec<error::Error>,
 }
 
@@ -48,17 +49,18 @@ type StmtResult = anyhow::Result<(), RuntimeError>;
 
 impl Interpreter {
     pub fn new() -> Interpreter {
-        let mut interpreter = Interpreter {
-            env: Box::new(env::Env::new()),
-            errors: vec![],
-        };
+        let globals = Rc::new(RefCell::new(env::Env::new()));
 
-        interpreter.env().define(
+        globals.borrow_mut().define(
             "clock".to_string(),
             Value::Callable(by_address::ByAddress(Rc::new(Clock::new()))),
         );
 
-        interpreter
+        Interpreter {
+            env: globals.clone(),
+            globals,
+            errors: vec![],
+        }
     }
 
     pub fn interpret(&mut self, stmts: &Vec<Box<ast::Stmt>>) -> StmtResult {
@@ -80,8 +82,37 @@ impl Interpreter {
         &self.errors
     }
 
-    pub fn env(&mut self) -> &mut env::Env {
-        &mut self.env
+    pub fn env(&self) -> Rc<RefCell<env::Env>> {
+        self.env.clone()
+    }
+
+    fn env_mut(&self) -> std::cell::RefMut<env::Env> {
+        self.env.borrow_mut()
+    }
+
+    pub fn globals(&self) -> Rc<RefCell<env::Env>> {
+        self.globals.clone()
+    }
+
+    pub fn execute_block(
+        &mut self,
+        v: &Vec<Box<ast::Stmt>>,
+        environ: Rc<RefCell<env::Env>>,
+    ) -> StmtResult {
+        let previous = self.env.clone();
+
+        self.env = environ;
+
+        let result = (|| -> StmtResult {
+            for stmt in v {
+                self.visit_stmt(stmt)?;
+            }
+            Ok(())
+        })();
+
+        self.env = previous;
+
+        result
     }
 }
 
@@ -226,12 +257,12 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
     }
 
     fn visit_variable(&mut self, name: &String) -> ExprResult {
-        self.env.get(name.to_string())
+        self.env().borrow().get(name.to_string())
     }
 
     fn visit_assign(&mut self, a: &ast::AssignExpr) -> ExprResult {
         let value = self.visit_expr(&*a.value)?;
-        self.env.assign(a.name.to_string(), value.clone())?;
+        self.env_mut().assign(a.name.to_string(), value.clone())?;
         Ok(value)
     }
 
@@ -252,12 +283,8 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
     }
 
     fn visit_block(&mut self, v: &Vec<Box<ast::Stmt>>) -> StmtResult {
-        self.env.push_block();
-        for s in v {
-            self.visit_stmt(s)?;
-        }
-        self.env.pop_block();
-        Ok(())
+        let block_env = Rc::new(RefCell::new(env::Env::with_parent(self.env.clone())));
+        self.execute_block(v, block_env)
     }
 
     fn visit_print_stmt(&mut self, e: &ast::Expr) -> StmtResult {
@@ -279,7 +306,7 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
             None => Value::Nil,
         };
 
-        self.env.define(v.name.to_string(), initial);
+        self.env_mut().define(v.name.to_string(), initial);
         Ok(())
     }
 
@@ -307,7 +334,7 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
         let fun: by_address::ByAddress<Rc<dyn Callable>> =
             by_address::ByAddress(Rc::new(function::Function::new(decl)));
         let value: Value = Value::Callable(fun);
-        self.env.define(decl.name.to_string(), value);
+        self.env_mut().define(decl.name.to_string(), value);
 
         Ok(())
     }

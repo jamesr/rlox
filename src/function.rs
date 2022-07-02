@@ -1,7 +1,7 @@
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use crate::{
-    ast,
+    ast, env,
     error::RuntimeError,
     eval::{self, Value},
 };
@@ -24,13 +24,15 @@ impl eval::Callable for Function {
         args: Vec<eval::Value>,
     ) -> anyhow::Result<eval::Value, RuntimeError> {
         // Make environment
-        interpreter.env().push_block(); // TODO - wrong scope
-        for i in 0..self.decl.params.len() {
-            interpreter
-                .env()
-                .define(self.decl.params[i].clone(), args[i].clone());
+        let env = Rc::new(RefCell::new(env::Env::with_parent(interpreter.globals())));
+
+        {
+            let mut env_mut = env.borrow_mut();
+            for i in 0..self.decl.params.len() {
+                env_mut.define(self.decl.params[i].clone(), args[i].clone());
+            }
         }
-        let result = interpreter.interpret(&self.decl.body);
+        let result = interpreter.execute_block(&self.decl.body, env);
         let value = match result {
             Err(RuntimeError::Return(v)) => v,
             Err(e) => {
@@ -38,7 +40,6 @@ impl eval::Callable for Function {
             }
             _ => Value::Nil,
         };
-        interpreter.env().pop_block();
         Ok(value)
     }
 
