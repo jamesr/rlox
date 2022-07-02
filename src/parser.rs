@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::rc::Rc;
 
 use crate::ast::{AssignExpr, FunctionStmt, IfStmt, LiteralValue, LogicalExpr, WhileStmt};
 use crate::scanner::{Scanner, Token, TokenType, TokenValue};
@@ -141,11 +142,11 @@ impl<'a> Parser<'a> {
 
         let body = self.block()?;
 
-        Ok(Box::new(ast::Stmt::Function(FunctionStmt {
+        Ok(Box::new(ast::Stmt::Function(Rc::new(FunctionStmt {
             name,
             params,
             body,
-        })))
+        }))))
     }
 
     // varDecl → "var" IDENTIFIER ( "=" expression )? ";" ;
@@ -647,6 +648,8 @@ pub fn parse_expression<'a>(source: &str) -> ExprResult {
 
 #[cfg(test)]
 mod tests {
+    use std::rc::Rc;
+
     use crate::ast::{self, *};
     use crate::error;
     use crate::parser::{parse, parse_expression};
@@ -901,7 +904,7 @@ mod tests {
 
         assert_eq!(
             stmts[0],
-            Box::new(ast::Stmt::Function(ast::FunctionStmt {
+            Box::new(ast::Stmt::Function(Rc::new(ast::FunctionStmt {
                 name: "add".to_string(),
                 params: vec!["a".to_string(), "b".to_string(),],
                 body: vec![Box::new(ast::Stmt::Print(Box::new(ast::Expr::Binary(
@@ -911,7 +914,7 @@ mod tests {
                         right: Box::new(ast::Expr::Variable("b".to_string()))
                     }
                 ))))],
-            }))
+            })))
         );
 
         Ok(())

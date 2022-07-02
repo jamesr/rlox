@@ -1,25 +1,27 @@
+use std::rc::Rc;
+
 use crate::{
     ast,
     eval::{self, Value},
 };
 
 #[derive(Debug)]
-pub struct Function<'a> {
-    decl: &'a ast::FunctionStmt,
+pub struct Function {
+    decl: Rc<ast::FunctionStmt>,
 }
 
-impl<'a> Function<'a> {
-    pub fn new(decl: &'a ast::FunctionStmt) -> Function<'a> {
-        Function { decl }
+impl Function {
+    pub fn new(decl: &Rc<ast::FunctionStmt>) -> Function {
+        Function { decl: decl.clone() }
     }
 }
 
-impl<'a> eval::Callable<'a> for Function<'a> {
+impl eval::Callable for Function {
     fn call(
         &self,
-        interpreter: &mut eval::Interpreter<'a>,
-        args: Vec<eval::Value<'a>>,
-    ) -> anyhow::Result<eval::Value<'a>, crate::error::RuntimeError> {
+        interpreter: &mut eval::Interpreter,
+        args: Vec<eval::Value>,
+    ) -> anyhow::Result<eval::Value, crate::error::RuntimeError> {
         // Make environment
         interpreter.env().push_block(); // TODO - wrong scope
         for i in 0..self.decl.params.len() {

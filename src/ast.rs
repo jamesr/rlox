@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 #[derive(PartialEq, Debug)]
 pub enum Expr {
     Unary(UnaryExpr),
@@ -77,7 +79,7 @@ pub enum Stmt {
     Var(VarDecl),
     If(IfStmt),
     While(WhileStmt),
-    Function(FunctionStmt),
+    Function(Rc<FunctionStmt>),
 }
 
 #[derive(PartialEq, Debug)]

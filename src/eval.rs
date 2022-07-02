@@ -7,26 +7,26 @@ use crate::{
     visitor::Visitor,
 };
 
-pub trait Callable<'a>: std::fmt::Debug {
+pub trait Callable: std::fmt::Debug {
     fn call(
         &self,
-        interpreter: &mut Interpreter<'a>,
-        args: Vec<Value<'a>>,
-    ) -> anyhow::Result<Value<'a>, RuntimeError>;
+        interpreter: &mut Interpreter,
+        args: Vec<Value>,
+    ) -> anyhow::Result<Value, RuntimeError>;
 
     fn arity(&self) -> usize;
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum Value<'a> {
+pub enum Value {
     String(String),
     Number(f64),
     Bool(bool),
-    Callable(by_address::ByAddress<Rc<dyn Callable<'a>>>),
+    Callable(by_address::ByAddress<Rc<dyn Callable>>),
     Nil,
 }
 
-impl Display for Value<'_> {
+impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Value::String(s) => write!(f, "\"{}\"", s),
@@ -38,16 +38,16 @@ impl Display for Value<'_> {
     }
 }
 
-pub struct Interpreter<'a> {
-    env: Box<env::Env<'a>>,
+pub struct Interpreter {
+    env: Box<env::Env>,
     errors: Vec<error::Error>,
 }
 
-type ExprResult<'a> = anyhow::Result<Value<'a>, RuntimeError>;
+type ExprResult = anyhow::Result<Value, RuntimeError>;
 type StmtResult = anyhow::Result<(), RuntimeError>;
 
-impl<'a> Interpreter<'a> {
-    pub fn new() -> Interpreter<'a> {
+impl Interpreter {
+    pub fn new() -> Interpreter {
         let mut interpreter = Interpreter {
             env: Box::new(env::Env::new()),
             errors: vec![],
@@ -68,7 +68,7 @@ impl<'a> Interpreter<'a> {
         Ok(())
     }
 
-    pub fn interpret_expr(&mut self, e: &ast::Expr) -> ExprResult<'a> {
+    pub fn interpret_expr(&mut self, e: &ast::Expr) -> ExprResult {
         self.visit_expr(e)
     }
 
@@ -80,7 +80,7 @@ impl<'a> Interpreter<'a> {
         &self.errors
     }
 
-    pub fn env(&mut self) -> &mut env::Env<'a> {
+    pub fn env(&mut self) -> &mut env::Env {
         &mut self.env
     }
 }
@@ -98,12 +98,12 @@ impl Clock {
     }
 }
 
-impl<'a> Callable<'a> for Clock {
+impl Callable for Clock {
     fn call(
         &self,
-        _interpreter: &mut Interpreter<'a>,
-        _args: Vec<Value<'a>>,
-    ) -> anyhow::Result<Value<'a>, RuntimeError> {
+        _interpreter: &mut Interpreter,
+        _args: Vec<Value>,
+    ) -> anyhow::Result<Value, RuntimeError> {
         Ok(Value::Number(self.start.elapsed().as_secs_f64()))
     }
     fn arity(&self) -> usize {
@@ -126,7 +126,7 @@ fn as_number(v: &Value) -> anyhow::Result<f64, RuntimeError> {
     }
 }
 
-impl<'a> Visitor<ExprResult<'a>, StmtResult> for Interpreter<'a> {
+impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
     fn expr_result_to_stmt_result(&self, e: ExprResult) -> StmtResult {
         match e {
             Ok(_) => Ok(()),
@@ -138,7 +138,7 @@ impl<'a> Visitor<ExprResult<'a>, StmtResult> for Interpreter<'a> {
         self.errors.push(e)
     }
 
-    fn visit_literal(&mut self, v: &ast::LiteralValue) -> ExprResult<'a> {
+    fn visit_literal(&mut self, v: &ast::LiteralValue) -> ExprResult {
         Ok(match v {
             ast::LiteralValue::String(s) => Value::String(s.to_string()),
             ast::LiteralValue::Number(n) => Value::Number(*n),
@@ -146,7 +146,7 @@ impl<'a> Visitor<ExprResult<'a>, StmtResult> for Interpreter<'a> {
             ast::LiteralValue::Nil => Value::Nil,
         })
     }
-    fn visit_call(&mut self, c: &ast::CallExpr) -> ExprResult<'a> {
+    fn visit_call(&mut self, c: &ast::CallExpr) -> ExprResult {
         let callee = self.visit_expr(&c.callee)?;
 
         let args_result: Result<Vec<Value>, error::RuntimeError> =
@@ -170,7 +170,7 @@ impl<'a> Visitor<ExprResult<'a>, StmtResult> for Interpreter<'a> {
         }
     }
 
-    fn visit_binary_expr(&mut self, e: &ast::BinaryExpr) -> ExprResult<'a> {
+    fn visit_binary_expr(&mut self, e: &ast::BinaryExpr) -> ExprResult {
         let left = self.visit_expr(&e.left)?;
         let right = self.visit_expr(&e.right)?;
 
@@ -208,11 +208,11 @@ impl<'a> Visitor<ExprResult<'a>, StmtResult> for Interpreter<'a> {
         }
     }
 
-    fn visit_grouping_expr(&mut self, e: &ast::Expr) -> ExprResult<'a> {
+    fn visit_grouping_expr(&mut self, e: &ast::Expr) -> ExprResult {
         self.visit_expr(e)
     }
 
-    fn visit_unary_expr(&mut self, e: &ast::UnaryExpr) -> ExprResult<'a> {
+    fn visit_unary_expr(&mut self, e: &ast::UnaryExpr) -> ExprResult {
         let val = self.visit_expr(&e.right)?;
         use ast::Operator::*;
         match e.operator {
@@ -225,17 +225,17 @@ impl<'a> Visitor<ExprResult<'a>, StmtResult> for Interpreter<'a> {
         }
     }
 
-    fn visit_variable(&mut self, name: &String) -> ExprResult<'a> {
+    fn visit_variable(&mut self, name: &String) -> ExprResult {
         self.env.get(name.to_string())
     }
 
-    fn visit_assign(&mut self, a: &ast::AssignExpr) -> ExprResult<'a> {
+    fn visit_assign(&mut self, a: &ast::AssignExpr) -> ExprResult {
         let value = self.visit_expr(&*a.value)?;
         self.env.assign(a.name.to_string(), value.clone())?;
         Ok(value)
     }
 
-    fn visit_logical(&mut self, l: &ast::LogicalExpr) -> ExprResult<'a> {
+    fn visit_logical(&mut self, l: &ast::LogicalExpr) -> ExprResult {
         let left = self.visit_expr(&l.left).ok().unwrap();
 
         if l.operator == ast::Operator::Or {
@@ -295,10 +295,11 @@ impl<'a> Visitor<ExprResult<'a>, StmtResult> for Interpreter<'a> {
         Ok(())
     }
 
-    fn visit_function_stmt(&mut self, f: &ast::FunctionStmt) -> StmtResult {
-        let _fun = by_address::ByAddress(Rc::new(function::Function::new(f)));
-        //self.env
-        //    .define(f.name.lexeme.to_string(), Value::Callable(fun));
+    fn visit_function_stmt(&mut self, decl: &Rc<ast::FunctionStmt>) -> StmtResult {
+        let fun: by_address::ByAddress<Rc<dyn Callable>> =
+            by_address::ByAddress(Rc::new(function::Function::new(decl)));
+        let value: Value = Value::Callable(fun);
+        self.env.define(decl.name.to_string(), value);
 
         Ok(())
     }

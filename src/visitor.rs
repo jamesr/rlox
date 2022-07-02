@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::{ast::*, error};
 
 pub trait Visitor<ExprResult, StmtResult> {
@@ -47,7 +49,7 @@ pub trait Visitor<ExprResult, StmtResult> {
     fn visit_var_decl_stmt(&mut self, v: &VarDecl) -> StmtResult;
     fn visit_if_stmt(&mut self, i: &IfStmt) -> StmtResult;
     fn visit_while_stmt(&mut self, w: &WhileStmt) -> StmtResult;
-    fn visit_function_stmt(&mut self, f: &FunctionStmt) -> StmtResult;
+    fn visit_function_stmt(&mut self, f: &Rc<FunctionStmt>) -> StmtResult;
 }
 
 pub struct AstPrinter;
@@ -151,8 +153,8 @@ impl Visitor<String, String> for AstPrinter {
         )
         .to_string()
     }
-    fn visit_function_stmt(&mut self, _f: &FunctionStmt) -> String {
-        format!(" TODO ").to_string()
+    fn visit_function_stmt(&mut self, _f: &Rc<FunctionStmt>) -> String {
+        format!("function ( <params> ) {{ <body> }} ").to_string()
     }
 }
 
