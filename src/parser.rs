@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use crate::ast::{AssignExpr, FunctionStmt, IfStmt, LogicalExpr, WhileStmt};
+use crate::ast::{AssignExpr, FunctionStmt, IfStmt, LiteralValue, LogicalExpr, WhileStmt};
 use crate::scanner::{Scanner, Token, TokenType, TokenValue};
 use crate::{ast, error};
 
@@ -14,10 +14,10 @@ pub struct Parser<'a> {
     state: RefCell<ParserState<'a>>,
 }
 
-type ExprResult<'a> = anyhow::Result<Box<ast::Expr<'a>>, error::ParseError>;
-type StmtResult<'a> = anyhow::Result<Box<ast::Stmt<'a>>, error::ParseError>;
-type StmtsResult<'a> = anyhow::Result<Vec<Box<ast::Stmt<'a>>>, error::ParseError>;
-type ParseResult<'a> = anyhow::Result<Vec<Box<ast::Stmt<'a>>>, Vec<error::ParseError>>;
+type ExprResult = anyhow::Result<Box<ast::Expr>, error::ParseError>;
+type StmtResult = anyhow::Result<Box<ast::Stmt>, error::ParseError>;
+type StmtsResult = anyhow::Result<Vec<Box<ast::Stmt>>, error::ParseError>;
+type ParseResult = anyhow::Result<Vec<Box<ast::Stmt>>, Vec<error::ParseError>>;
 
 impl<'a> Parser<'a> {
     pub fn new(scanner: Scanner<'a>) -> Parser<'a> {
@@ -31,13 +31,33 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse_expression(&mut self) -> ExprResult<'a> {
+    pub fn parse_expression(&mut self) -> ExprResult {
         self.prime()?;
 
         self.expression()
     }
 
-    pub fn parse(&mut self) -> ParseResult<'a> {
+    fn operator(&self) -> Result<ast::Operator, error::ParseError> {
+        let token = self.previous().unwrap();
+        match token.token_type {
+            TokenType::Minus => Ok(ast::Operator::Minus),
+            TokenType::Plus => Ok(ast::Operator::Plus),
+            TokenType::Slash => Ok(ast::Operator::Slash),
+            TokenType::Star => Ok(ast::Operator::Star),
+            TokenType::Bang => Ok(ast::Operator::Bang),
+            TokenType::BangEqual => Ok(ast::Operator::BangEqual),
+            TokenType::Equal => Ok(ast::Operator::Equal),
+            TokenType::EqualEqual => Ok(ast::Operator::EqualEqual),
+            TokenType::Greater => Ok(ast::Operator::Greater),
+            TokenType::GreaterEqual => Ok(ast::Operator::GreaterEqual),
+            TokenType::Less => Ok(ast::Operator::Less),
+            TokenType::LessEqual => Ok(ast::Operator::LessEqual),
+            TokenType::And => Ok(ast::Operator::And),
+            TokenType::Or => Ok(ast::Operator::Or),
+            _ => Err(self.error(format!("Expected operator found '{}'.", token.lexeme))),
+        }
+    }
+    pub fn parse(&mut self) -> ParseResult {
         if let Err(e) = self.prime() {
             return Err(vec![e]);
         }
@@ -55,7 +75,7 @@ impl<'a> Parser<'a> {
     }
 
     // program → declaration* EOF ;
-    fn program(&self) -> StmtsResult<'a> {
+    fn program(&self) -> StmtsResult {
         let mut statements = Vec::new();
 
         while !self.at_end() {
@@ -66,7 +86,7 @@ impl<'a> Parser<'a> {
     }
 
     // declaration → funDecl | varDecl | statement ;
-    fn declaration(&self) -> StmtResult<'a> {
+    fn declaration(&self) -> StmtResult {
         match (|| {
             if self.matches(&[TokenType::Fun])? {
                 return self.fun_decl("function");
@@ -89,9 +109,9 @@ impl<'a> Parser<'a> {
     // funDecl → "fun" function ;
     // function → IDENTIFIER "(" parameters? ")" block ;
     // parameters → IDENTIFIER ( "," IDENTIFIER )* ;
-    fn fun_decl(&self, kind: &str) -> StmtResult<'a> {
+    fn fun_decl(&self, kind: &str) -> StmtResult {
         self.consume(TokenType::Identifier, &format!("Expect {} name.", kind))?;
-        let name = self.previous().unwrap();
+        let name = self.previous().unwrap().lexeme.to_string();
         self.consume(
             TokenType::LeftParen,
             &format!("Expect '(' after {} name.", kind),
@@ -105,7 +125,7 @@ impl<'a> Parser<'a> {
                 }
 
                 self.consume(TokenType::Identifier, "Expect parameter name.")?;
-                params.push(self.previous().unwrap());
+                params.push(self.previous().unwrap().lexeme.to_string());
 
                 if !self.matches(&[TokenType::Comma])? {
                     break;
@@ -129,9 +149,9 @@ impl<'a> Parser<'a> {
     }
 
     // varDecl → "var" IDENTIFIER ( "=" expression )? ";" ;
-    fn var_decl(&self) -> StmtResult<'a> {
+    fn var_decl(&self) -> StmtResult {
         self.consume(TokenType::Identifier, "Expect variable name.")?;
-        let name = self.previous().unwrap();
+        let name = self.previous().unwrap().lexeme.to_string();
 
         let initializer = if self.matches(&[TokenType::Equal])? {
             Some(self.expression()?)
@@ -256,13 +276,13 @@ impl<'a> Parser<'a> {
     }
 
     // expression → assignment ;
-    fn expression(&self) -> ExprResult<'a> {
+    fn expression(&self) -> ExprResult {
         self.assignment()
     }
 
     // assignment → IDENTIFIER "=" assignment
     //              | logic_or ;
-    fn assignment(&self) -> ExprResult<'a> {
+    fn assignment(&self) -> ExprResult {
         let expr = self.logic_or()?;
 
         if self.matches(&[TokenType::Equal])? {
@@ -277,11 +297,11 @@ impl<'a> Parser<'a> {
     }
 
     // logic_or       → logic_and ( "or" logic_and )* ;
-    fn logic_or(&self) -> ExprResult<'a> {
+    fn logic_or(&self) -> ExprResult {
         let mut expr = self.logic_and()?;
 
         while self.matches(&[TokenType::Or])? {
-            let operator = self.previous().unwrap();
+            let operator = self.operator()?;
             let right = self.logic_and()?;
             expr = Box::new(ast::Expr::Logical(LogicalExpr {
                 left: expr,
@@ -293,11 +313,11 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
     // logic_and      → equality ( "and" equality )* ;
-    fn logic_and(&self) -> ExprResult<'a> {
+    fn logic_and(&self) -> ExprResult {
         let mut expr = self.equality()?;
 
         while self.matches(&[TokenType::And])? {
-            let operator = self.previous().unwrap();
+            let operator = self.operator()?;
             let right = self.equality()?;
             expr = Box::new(ast::Expr::Logical(LogicalExpr {
                 left: expr,
@@ -310,15 +330,15 @@ impl<'a> Parser<'a> {
     }
 
     // equality → comparison ( ( "!=" | "==" ) comparison )* ;
-    fn equality(&self) -> ExprResult<'a> {
+    fn equality(&self) -> ExprResult {
         let mut expr = self.comparison()?;
 
         while self.matches(&[TokenType::BangEqual, TokenType::EqualEqual])? {
-            let operator = self.previous();
+            let operator = self.operator()?;
             let right = self.comparison()?;
             expr = Box::new(ast::Expr::Binary(ast::BinaryExpr {
                 left: expr,
-                operator: operator.unwrap(),
+                operator,
                 right,
             }));
         }
@@ -327,7 +347,7 @@ impl<'a> Parser<'a> {
     }
 
     // comparison → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
-    fn comparison(&self) -> ExprResult<'a> {
+    fn comparison(&self) -> ExprResult {
         let mut expr = self.term()?;
 
         while self.matches(&[
@@ -336,11 +356,11 @@ impl<'a> Parser<'a> {
             TokenType::Less,
             TokenType::LessEqual,
         ])? {
-            let operator = self.previous();
+            let operator = self.operator()?;
             let right = self.term()?;
             expr = Box::new(ast::Expr::Binary(ast::BinaryExpr {
                 left: expr,
-                operator: operator.unwrap(),
+                operator,
                 right,
             }))
         }
@@ -349,15 +369,15 @@ impl<'a> Parser<'a> {
     }
 
     // term → factor ( ( "-" | "+" ) factor )* ;
-    fn term(&self) -> ExprResult<'a> {
+    fn term(&self) -> ExprResult {
         let mut expr = self.factor()?;
 
         while self.matches(&[TokenType::Minus, TokenType::Plus])? {
-            let operator = self.previous();
+            let operator = self.operator()?;
             let right = self.factor()?;
             expr = Box::new(ast::Expr::Binary(ast::BinaryExpr {
                 left: expr,
-                operator: operator.unwrap(),
+                operator,
                 right,
             }))
         }
@@ -366,15 +386,15 @@ impl<'a> Parser<'a> {
     }
 
     // factor → unary ( ( "/" | "*" ) unary )* ;
-    fn factor(&self) -> ExprResult<'a> {
+    fn factor(&self) -> ExprResult {
         let mut expr = self.unary()?;
 
         while self.matches(&[TokenType::Slash, TokenType::Star])? {
-            let operator = self.previous();
+            let operator = self.operator()?;
             let right = self.unary()?;
             expr = Box::new(ast::Expr::Binary(ast::BinaryExpr {
                 left: expr,
-                operator: operator.unwrap(),
+                operator,
                 right,
             }))
         }
@@ -383,12 +403,12 @@ impl<'a> Parser<'a> {
     }
 
     // unary → ( "!" | "-" ) unary | call ;
-    fn unary(&self) -> ExprResult<'a> {
+    fn unary(&self) -> ExprResult {
         if self.matches(&[TokenType::Bang, TokenType::Minus])? {
-            let operator = self.previous();
+            let operator = self.operator()?;
             let right = self.unary()?;
             return Ok(Box::new(ast::Expr::Unary(ast::UnaryExpr {
-                operator: operator.unwrap(),
+                operator,
                 right,
             })));
         }
@@ -396,7 +416,7 @@ impl<'a> Parser<'a> {
     }
 
     // call → primary ( "(" arguments? ")" )* ;
-    fn call(&self) -> ExprResult<'a> {
+    fn call(&self) -> ExprResult {
         let mut expr = self.primary()?;
 
         loop {
@@ -411,7 +431,7 @@ impl<'a> Parser<'a> {
     }
 
     // arguments → expression ( "," expression )* ;
-    fn finish_call(&self, callee: Box<ast::Expr<'a>>) -> ExprResult<'a> {
+    fn finish_call(&self, callee: Box<ast::Expr>) -> ExprResult {
         let mut args = vec![];
 
         if !self.check(TokenType::RightParen) {
@@ -427,32 +447,33 @@ impl<'a> Parser<'a> {
         }
 
         self.consume(TokenType::RightParen, "Expect ')' after arguments.")?;
-        let paren = self.previous().unwrap();
 
-        Ok(Box::new(ast::Expr::Call(ast::CallExpr {
-            callee,
-            paren,
-            args,
-        })))
+        Ok(Box::new(ast::Expr::Call(ast::CallExpr { callee, args })))
     }
 
     // primary  → "true" | "false" | "nil"
     //          | NUMBER | STRING
     //          | "(" expression ")"
     //          | IDENTIFIER ;
-    fn primary(&self) -> ExprResult<'a> {
+    fn primary(&self) -> ExprResult {
         if self.matches(&[TokenType::True])? {
-            return Ok(Box::new(ast::Expr::Literal(TokenValue::Bool(true))));
+            return Ok(Box::new(ast::Expr::Literal(LiteralValue::Bool(true))));
         }
         if self.matches(&[TokenType::False])? {
-            return Ok(Box::new(ast::Expr::Literal(TokenValue::Bool(false))));
+            return Ok(Box::new(ast::Expr::Literal(LiteralValue::Bool(false))));
         }
         if self.matches(&[TokenType::Nil])? {
-            return Ok(Box::new(ast::Expr::Literal(TokenValue::Nil)));
+            return Ok(Box::new(ast::Expr::Literal(LiteralValue::Nil)));
         }
         if self.matches(&[TokenType::Number, TokenType::String])? {
             return Ok(Box::new(ast::Expr::Literal(
-                self.previous().unwrap().value.unwrap(),
+                match self.previous().unwrap().value.unwrap() {
+                    TokenValue::Number(n) => LiteralValue::Number(n),
+                    TokenValue::String(s) => LiteralValue::String(s.to_string()),
+                    _ => {
+                        panic!("oops");
+                    }
+                },
             )));
         }
         if self.matches(&[TokenType::LeftParen])? {
@@ -462,7 +483,7 @@ impl<'a> Parser<'a> {
         }
         if self.matches(&[TokenType::Identifier])? {
             let token = self.previous().unwrap();
-            return Ok(Box::new(ast::Expr::Variable(token)));
+            return Ok(Box::new(ast::Expr::Variable(token.lexeme.to_string())));
         }
         Err(self.error("expected expression".to_string()))
     }
@@ -473,7 +494,7 @@ impl<'a> Parser<'a> {
     //           | printStmt
     //           | whileStmt
     //           | block ;
-    fn statement(&self) -> StmtResult<'a> {
+    fn statement(&self) -> StmtResult {
         if self.matches(&[TokenType::For])? {
             return self.for_stmt();
         }
@@ -494,7 +515,7 @@ impl<'a> Parser<'a> {
     }
 
     // block → "{" declaration* "}" ;
-    fn block(&self) -> StmtsResult<'a> {
+    fn block(&self) -> StmtsResult {
         let mut stmts = Vec::new();
 
         while !self.check(TokenType::RightBrace) && !self.at_end() {
@@ -507,14 +528,14 @@ impl<'a> Parser<'a> {
     }
 
     // exprStmt → expression ";" ;
-    fn expr_stmt(&self) -> StmtResult<'a> {
+    fn expr_stmt(&self) -> StmtResult {
         let expr = self.expression()?;
         self.consume(TokenType::Semicolon, "Expect ';' after value.")?;
         Ok(Box::new(ast::Stmt::Expr(expr)))
     }
 
     // printStmt → "print" expression ";"
-    fn print_stmt(&self) -> StmtResult<'a> {
+    fn print_stmt(&self) -> StmtResult {
         let expr = self.expression()?;
         self.consume(TokenType::Semicolon, "Expect ';' after value.")?;
         Ok(Box::new(ast::Stmt::Print(expr)))
@@ -522,7 +543,7 @@ impl<'a> Parser<'a> {
 
     // ifStmt → "if" "(" expression ")" statement
     //          ( "else" statement )? ;
-    fn if_stmt(&self) -> StmtResult<'a> {
+    fn if_stmt(&self) -> StmtResult {
         self.consume(TokenType::LeftParen, "Expect '(' after 'if'.")?;
         let condition = self.expression()?;
         self.consume(TokenType::RightParen, "Expect ')' after if condition.")?;
@@ -542,7 +563,7 @@ impl<'a> Parser<'a> {
     }
 
     // whileStmt → "while" "(" expression ")" statement ;
-    fn while_stmt(&self) -> StmtResult<'a> {
+    fn while_stmt(&self) -> StmtResult {
         self.consume(TokenType::LeftParen, "Expect '(' after 'while'.")?;
 
         let condition = self.expression()?;
@@ -557,7 +578,7 @@ impl<'a> Parser<'a> {
     // forStmt → "for" "(" ( varDecl | exprStmt | ";" )
     //           expression? ";"
     //           expression? ")" statement ;
-    fn for_stmt(&self) -> StmtResult<'a> {
+    fn for_stmt(&self) -> StmtResult {
         self.consume(TokenType::LeftParen, "Expect '(' after 'for'.")?;
 
         let initializer = if self.matches(&[TokenType::Semicolon])? {
@@ -569,7 +590,7 @@ impl<'a> Parser<'a> {
         };
 
         let condition = if self.check(TokenType::Semicolon) {
-            Box::new(ast::Expr::Literal(TokenValue::Bool(true)))
+            Box::new(ast::Expr::Literal(LiteralValue::Bool(true)))
         } else {
             self.expression()?
         };
@@ -612,7 +633,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-pub fn parse<'a>(source: &'a str) -> ParseResult<'a> {
+pub fn parse<'a>(source: &'a str) -> ParseResult {
     let scanner = Scanner::new(source);
     let mut parser = Parser::new(scanner);
     parser.parse()
@@ -629,7 +650,6 @@ mod tests {
     use crate::ast::{self, *};
     use crate::error;
     use crate::parser::{parse, parse_expression};
-    use crate::scanner::*;
 
     #[test]
     fn comparison() -> Result<(), error::ParseError> {
@@ -644,10 +664,13 @@ mod tests {
     #[test]
     fn literal() -> Result<(), error::ParseError> {
         let false_literal = parse_expression("false")?;
-        assert_eq!(*false_literal, ast::Expr::Literal(TokenValue::Bool(false)));
+        assert_eq!(
+            *false_literal,
+            ast::Expr::Literal(LiteralValue::Bool(false))
+        );
 
         let true_literal = parse_expression("true")?;
-        assert_eq!(*true_literal, ast::Expr::Literal(TokenValue::Bool(true)));
+        assert_eq!(*true_literal, ast::Expr::Literal(LiteralValue::Bool(true)));
 
         Ok(())
     }
@@ -658,13 +681,8 @@ mod tests {
         assert_eq!(
             *unary_minus,
             ast::Expr::Unary(UnaryExpr {
-                operator: Token {
-                    token_type: TokenType::Minus,
-                    lexeme: "-",
-                    value: None,
-                    line: 0,
-                },
-                right: Box::new(ast::Expr::Literal(TokenValue::Number(5.0))),
+                operator: Operator::Minus,
+                right: Box::new(ast::Expr::Literal(LiteralValue::Number(5.0))),
             })
         );
 
@@ -672,13 +690,8 @@ mod tests {
         assert_eq!(
             *unary_negate,
             ast::Expr::Unary(UnaryExpr {
-                operator: Token {
-                    token_type: TokenType::Bang,
-                    lexeme: "!",
-                    value: None,
-                    line: 0,
-                },
-                right: Box::new(ast::Expr::Literal(TokenValue::Bool(false))),
+                operator: Operator::Bang,
+                right: Box::new(ast::Expr::Literal(LiteralValue::Bool(false))),
             })
         );
         Ok(())
@@ -691,13 +704,8 @@ mod tests {
         assert_eq!(
             *assign_simple,
             ast::Expr::Assign(AssignExpr {
-                name: Token {
-                    token_type: TokenType::Identifier,
-                    lexeme: "foo",
-                    value: None,
-                    line: 0
-                },
-                value: Box::new(ast::Expr::Literal(TokenValue::Number(3.0))),
+                name: "foo".to_string(),
+                value: Box::new(ast::Expr::Literal(LiteralValue::Number(3.0))),
             })
         );
 
@@ -711,7 +719,7 @@ mod tests {
         assert_eq!(
             block[0],
             Box::new(ast::Stmt::Block(vec![Box::new(ast::Stmt::Expr(Box::new(
-                ast::Expr::Literal(TokenValue::Number(5.0))
+                ast::Expr::Literal(LiteralValue::Number(5.0))
             ),))]))
         );
 
@@ -725,9 +733,9 @@ mod tests {
         assert_eq!(
             if_statement[0],
             Box::new(ast::Stmt::If(IfStmt {
-                condition: Box::new(ast::Expr::Literal(TokenValue::Bool(true))),
+                condition: Box::new(ast::Expr::Literal(LiteralValue::Bool(true))),
                 then_branch: Box::new(ast::Stmt::Block(vec![Box::new(ast::Stmt::Print(
-                    Box::new(ast::Expr::Literal(TokenValue::Number(5.0)))
+                    Box::new(ast::Expr::Literal(LiteralValue::Number(5.0)))
                 ))])),
                 else_branch: None,
             }))
@@ -748,12 +756,7 @@ mod tests {
         assert_eq!(
             stmts[0],
             Box::new(ast::Stmt::Var(VarDecl {
-                name: Token {
-                    token_type: TokenType::Identifier,
-                    lexeme: "all_tests_passed",
-                    value: None,
-                    line: 0
-                },
+                name: "all_tests_passed".to_string(),
                 initializer: None,
             }))
         );
@@ -761,16 +764,11 @@ mod tests {
         assert_eq!(
             stmts[1],
             Box::new(ast::Stmt::If(IfStmt {
-                condition: Box::new(ast::Expr::Literal(TokenValue::Bool(true))),
+                condition: Box::new(ast::Expr::Literal(LiteralValue::Bool(true))),
                 then_branch: Box::new(ast::Stmt::Block(vec![Box::new(ast::Stmt::Expr(Box::new(
                     ast::Expr::Assign(AssignExpr {
-                        name: Token {
-                            token_type: TokenType::Identifier,
-                            lexeme: "all_tests_passed",
-                            value: None,
-                            line: 2
-                        },
-                        value: Box::new(ast::Expr::Literal(TokenValue::Bool(true)))
+                        name: "all_tests_passed".to_string(),
+                        value: Box::new(ast::Expr::Literal(LiteralValue::Bool(true)))
                     })
                 )))])),
                 else_branch: None,
@@ -789,14 +787,9 @@ mod tests {
         assert_eq!(
             stmts[0],
             Box::new(ast::Stmt::Expr(Box::new(ast::Expr::Logical(LogicalExpr {
-                left: Box::new(ast::Expr::Literal(TokenValue::Bool(false))),
-                operator: Token {
-                    token_type: TokenType::And,
-                    lexeme: "and",
-                    value: None,
-                    line: 0
-                },
-                right: Box::new(ast::Expr::Literal(TokenValue::Bool(true))),
+                left: Box::new(ast::Expr::Literal(LiteralValue::Bool(false))),
+                operator: Operator::And,
+                right: Box::new(ast::Expr::Literal(LiteralValue::Bool(true))),
             }))))
         );
 
@@ -813,41 +806,16 @@ mod tests {
             stmts[0],
             Box::new(ast::Stmt::While(WhileStmt {
                 condition: Box::new(ast::Expr::Binary(BinaryExpr {
-                    left: Box::new(ast::Expr::Variable(Token {
-                        token_type: TokenType::Identifier,
-                        lexeme: "i",
-                        value: None,
-                        line: 0
-                    })),
-                    operator: Token {
-                        token_type: TokenType::Less,
-                        lexeme: "<",
-                        value: None,
-                        line: 0
-                    },
-                    right: Box::new(ast::Expr::Literal(TokenValue::Number(5.0)))
+                    left: Box::new(ast::Expr::Variable("i".to_string())),
+                    operator: Operator::Less,
+                    right: Box::new(ast::Expr::Literal(LiteralValue::Number(5.0)))
                 })),
                 body: Box::new(ast::Stmt::Expr(Box::new(ast::Expr::Assign(AssignExpr {
-                    name: Token {
-                        token_type: TokenType::Identifier,
-                        lexeme: "i",
-                        value: None,
-                        line: 0
-                    },
+                    name: "i".to_string(),
                     value: Box::new(ast::Expr::Binary(BinaryExpr {
-                        left: Box::new(ast::Expr::Variable(Token {
-                            token_type: TokenType::Identifier,
-                            lexeme: "i",
-                            value: None,
-                            line: 0
-                        })),
-                        operator: Token {
-                            token_type: TokenType::Plus,
-                            lexeme: "+",
-                            value: None,
-                            line: 0
-                        },
-                        right: Box::new(ast::Expr::Literal(TokenValue::Number(1.0)))
+                        left: Box::new(ast::Expr::Variable("i".to_string())),
+                        operator: Operator::Plus,
+                        right: Box::new(ast::Expr::Literal(LiteralValue::Number(1.0)))
                     }))
                 }))))
             }))
@@ -871,48 +839,33 @@ mod tests {
         //   }
         let stmts = parse("for (var i = 0; i < 10; i = i + 1) print i;")?;
 
-        let i_token = Token {
-            token_type: TokenType::Identifier,
-            lexeme: "i",
-            value: None,
-            line: 0,
-        };
-
         assert_eq!(
             stmts,
             vec![Box::new(ast::Stmt::Block(vec![
                 // "var i = 0;"
                 Box::new(ast::Stmt::Var(VarDecl {
-                    name: i_token,
-                    initializer: Some(Box::new(ast::Expr::Literal(TokenValue::Number(0.0))))
+                    name: "i".to_string(),
+                    initializer: Some(Box::new(ast::Expr::Literal(LiteralValue::Number(0.0))))
                 },)),
                 // "while (i < 10) {"
                 Box::new(ast::Stmt::While(WhileStmt {
                     condition: Box::new(ast::Expr::Binary(BinaryExpr {
-                        left: Box::new(ast::Expr::Variable(i_token)),
-                        operator: Token {
-                            token_type: TokenType::Less,
-                            lexeme: "<",
-                            value: None,
-                            line: 0
-                        },
-                        right: Box::new(ast::Expr::Literal(TokenValue::Number(10.0))),
+                        left: Box::new(ast::Expr::Variable("i".to_string())),
+                        operator: Operator::Less,
+                        right: Box::new(ast::Expr::Literal(LiteralValue::Number(10.0))),
                     })),
                     body: Box::new(ast::Stmt::Block(vec![
                         // "print i;"
-                        Box::new(ast::Stmt::Print(Box::new(ast::Expr::Variable(i_token)))),
+                        Box::new(ast::Stmt::Print(Box::new(ast::Expr::Variable(
+                            "i".to_string()
+                        )))),
                         // "i = i + 1;"
                         Box::new(ast::Stmt::Expr(Box::new(ast::Expr::Assign(AssignExpr {
-                            name: i_token,
+                            name: "i".to_string(),
                             value: Box::new(ast::Expr::Binary(BinaryExpr {
-                                left: Box::new(ast::Expr::Variable(i_token)),
-                                operator: Token {
-                                    token_type: TokenType::Plus,
-                                    lexeme: "+",
-                                    value: None,
-                                    line: 0,
-                                },
-                                right: Box::new(ast::Expr::Literal(TokenValue::Number(1.0)),)
+                                left: Box::new(ast::Expr::Variable("i".to_string())),
+                                operator: Operator::Plus,
+                                right: Box::new(ast::Expr::Literal(LiteralValue::Number(1.0)),)
                             }))
                         }))))
                     ])),
@@ -930,21 +883,10 @@ mod tests {
         assert_eq!(
             expr,
             Box::new(ast::Expr::Call(CallExpr {
-                callee: Box::new(ast::Expr::Variable(Token {
-                    token_type: TokenType::Identifier,
-                    lexeme: "callback",
-                    value: None,
-                    line: 0
-                })),
-                paren: Token {
-                    token_type: TokenType::RightParen,
-                    lexeme: ")",
-                    value: None,
-                    line: 0
-                },
+                callee: Box::new(ast::Expr::Variable("callback".to_string())),
                 args: vec![
-                    Box::new(ast::Expr::Literal(TokenValue::Number(5.0))),
-                    Box::new(ast::Expr::Literal(TokenValue::Bool(true))),
+                    Box::new(ast::Expr::Literal(LiteralValue::Number(5.0))),
+                    Box::new(ast::Expr::Literal(LiteralValue::Bool(true))),
                 ],
             }))
         );
@@ -960,18 +902,13 @@ mod tests {
         assert_eq!(
             stmts[0],
             Box::new(ast::Stmt::Function(ast::FunctionStmt {
-                name: Token::identifier("add"),
-                params: vec![Token::identifier("a"), Token::identifier("b"),],
+                name: "add".to_string(),
+                params: vec!["a".to_string(), "b".to_string(),],
                 body: vec![Box::new(ast::Stmt::Print(Box::new(ast::Expr::Binary(
                     BinaryExpr {
-                        left: Box::new(ast::Expr::Variable(Token::identifier("a"))),
-                        operator: Token {
-                            token_type: TokenType::Plus,
-                            lexeme: "+",
-                            value: None,
-                            line: 0
-                        },
-                        right: Box::new(ast::Expr::Variable(Token::identifier("b")))
+                        left: Box::new(ast::Expr::Variable("a".to_string())),
+                        operator: Operator::Plus,
+                        right: Box::new(ast::Expr::Variable("b".to_string()))
                     }
                 ))))],
             }))

@@ -1,83 +1,132 @@
-use crate::scanner::{Token, TokenValue};
-
 #[derive(PartialEq, Debug)]
-pub enum Expr<'a> {
-    Binary(BinaryExpr<'a>),
-    Grouping(Box<Expr<'a>>),
-    Literal(TokenValue<'a>),
-    Unary(UnaryExpr<'a>),
-    Variable(Token<'a>),
-    Assign(AssignExpr<'a>),
-    Logical(LogicalExpr<'a>),
-    Call(CallExpr<'a>),
+pub enum Expr {
+    Unary(UnaryExpr),
+    Binary(BinaryExpr),
+    Grouping(Box<Expr>),
+    Literal(LiteralValue),
+    Variable(String),
+    Assign(AssignExpr),
+    Logical(LogicalExpr),
+    Call(CallExpr),
 }
 
 #[derive(PartialEq, Debug)]
-pub struct UnaryExpr<'a> {
-    pub operator: Token<'a>,
-    pub right: Box<Expr<'a>>,
+pub enum Operator {
+    Minus,
+    Plus,
+    Slash,
+    Star,
+    Bang,
+    BangEqual,
+    Equal,
+    EqualEqual,
+    Greater,
+    GreaterEqual,
+    Less,
+    LessEqual,
+    And,
+    Or,
 }
 
 #[derive(PartialEq, Debug)]
-pub struct BinaryExpr<'a> {
-    pub left: Box<Expr<'a>>,
-    pub operator: Token<'a>,
-    pub right: Box<Expr<'a>>,
+pub struct UnaryExpr {
+    pub operator: Operator,
+    pub right: Box<Expr>,
 }
 
 #[derive(PartialEq, Debug)]
-pub struct AssignExpr<'a> {
-    pub name: Token<'a>,
-    pub value: Box<Expr<'a>>,
+pub struct BinaryExpr {
+    pub left: Box<Expr>,
+    pub operator: Operator,
+    pub right: Box<Expr>,
 }
 
 #[derive(PartialEq, Debug)]
-pub struct LogicalExpr<'a> {
-    pub left: Box<Expr<'a>>,
-    pub operator: Token<'a>,
-    pub right: Box<Expr<'a>>,
+pub enum LiteralValue {
+    String(String),
+    Number(f64),
+    Bool(bool),
+    Nil,
 }
 
 #[derive(PartialEq, Debug)]
-pub struct CallExpr<'a> {
-    pub callee: Box<Expr<'a>>,
-    pub paren: Token<'a>,
-    pub args: Vec<Box<Expr<'a>>>,
+pub struct AssignExpr {
+    pub name: String,
+    pub value: Box<Expr>,
 }
 
 #[derive(PartialEq, Debug)]
-pub enum Stmt<'a> {
-    Expr(Box<Expr<'a>>),
-    Print(Box<Expr<'a>>),
-    Block(Vec<Box<Stmt<'a>>>),
-    Var(VarDecl<'a>),
-    If(IfStmt<'a>),
-    While(WhileStmt<'a>),
-    Function(FunctionStmt<'a>),
+pub struct LogicalExpr {
+    pub left: Box<Expr>,
+    pub operator: Operator,
+    pub right: Box<Expr>,
 }
 
 #[derive(PartialEq, Debug)]
-pub struct VarDecl<'a> {
-    pub name: Token<'a>,
-    pub initializer: Option<Box<Expr<'a>>>,
+pub struct CallExpr {
+    pub callee: Box<Expr>,
+    pub args: Vec<Box<Expr>>,
+    // TODO: Track source location for error reporting
 }
 
 #[derive(PartialEq, Debug)]
-pub struct IfStmt<'a> {
-    pub condition: Box<Expr<'a>>,
-    pub then_branch: Box<Stmt<'a>>,
-    pub else_branch: Option<Box<Stmt<'a>>>,
+pub enum Stmt {
+    Expr(Box<Expr>),
+    Print(Box<Expr>),
+    Block(Vec<Box<Stmt>>),
+    Var(VarDecl),
+    If(IfStmt),
+    While(WhileStmt),
+    Function(FunctionStmt),
 }
 
 #[derive(PartialEq, Debug)]
-pub struct WhileStmt<'a> {
-    pub condition: Box<Expr<'a>>,
-    pub body: Box<Stmt<'a>>,
+pub struct VarDecl {
+    pub name: String,
+    pub initializer: Option<Box<Expr>>,
 }
 
 #[derive(PartialEq, Debug)]
-pub struct FunctionStmt<'a> {
-    pub name: Token<'a>,
-    pub params: Vec<Token<'a>>,
-    pub body: Vec<Box<Stmt<'a>>>,
+pub struct IfStmt {
+    pub condition: Box<Expr>,
+    pub then_branch: Box<Stmt>,
+    pub else_branch: Option<Box<Stmt>>,
+}
+
+#[derive(PartialEq, Debug)]
+pub struct WhileStmt {
+    pub condition: Box<Expr>,
+    pub body: Box<Stmt>,
+}
+
+#[derive(PartialEq, Debug)]
+pub struct FunctionStmt {
+    pub name: String,
+    pub params: Vec<String>,
+    pub body: Vec<Box<Stmt>>,
+}
+
+impl std::fmt::Display for Operator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Operator::Minus => "-",
+                Operator::Plus => "+",
+                Operator::Slash => "/",
+                Operator::Star => "*",
+                Operator::Bang => "!",
+                Operator::BangEqual => "!=",
+                Operator::Equal => "=",
+                Operator::EqualEqual => "==",
+                Operator::Greater => ">",
+                Operator::GreaterEqual => ">=",
+                Operator::Less => "<",
+                Operator::LessEqual => "<=",
+                Operator::And => "and",
+                Operator::Or => "or",
+            }
+        )
+    }
 }

@@ -8,6 +8,7 @@ pub mod ast;
 pub mod env;
 pub mod error;
 pub mod eval;
+pub mod function;
 pub mod parser;
 pub mod scanner;
 pub mod visitor;
@@ -19,7 +20,7 @@ fn run(source: &str, interpreter: &mut Interpreter) -> anyhow::Result<(), anyhow
             return Err(error::convert_parse(&v));
         }
     };
-    interpreter.interpret(stmts)?;
+    interpreter.interpret(&stmts)?;
     if interpreter.has_error() {
         for e in interpreter.errors() {
             println!("{}", e);

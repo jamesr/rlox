@@ -1,10 +1,10 @@
-use crate::{ast::*, error, scanner::*};
+use crate::{ast::*, error};
 
 pub trait Visitor<ExprResult, StmtResult> {
     fn expr_result_to_stmt_result(&self, e: ExprResult) -> StmtResult;
     fn report_error(&mut self, _: error::Error) {}
 
-    fn visit_literal(&mut self, v: &TokenValue) -> ExprResult;
+    fn visit_literal(&mut self, v: &LiteralValue) -> ExprResult;
     fn visit_expr(&mut self, e: &Expr) -> ExprResult {
         use Expr::*;
         match e {
@@ -12,7 +12,7 @@ pub trait Visitor<ExprResult, StmtResult> {
             Grouping(g) => self.visit_grouping_expr(g),
             Literal(l) => self.visit_literal(l),
             Unary(u) => self.visit_unary_expr(u),
-            Variable(t) => self.visit_variable(t),
+            Variable(s) => self.visit_variable(s),
             Assign(a) => self.visit_assign(a),
             Logical(a) => self.visit_logical(a),
             Call(c) => self.visit_call(c),
@@ -21,7 +21,7 @@ pub trait Visitor<ExprResult, StmtResult> {
     fn visit_binary_expr(&mut self, e: &BinaryExpr) -> ExprResult;
     fn visit_grouping_expr(&mut self, e: &Expr) -> ExprResult;
     fn visit_unary_expr(&mut self, e: &UnaryExpr) -> ExprResult;
-    fn visit_variable(&mut self, t: &Token) -> ExprResult;
+    fn visit_variable(&mut self, s: &String) -> ExprResult;
     fn visit_assign(&mut self, a: &AssignExpr) -> ExprResult;
     fn visit_logical(&mut self, l: &LogicalExpr) -> ExprResult;
     fn visit_call(&mut self, c: &CallExpr) -> ExprResult;
@@ -56,12 +56,12 @@ impl Visitor<String, String> for AstPrinter {
         e
     }
 
-    fn visit_literal(&mut self, v: &TokenValue) -> String {
+    fn visit_literal(&mut self, v: &LiteralValue) -> String {
         match v {
-            TokenValue::String(s) => s.to_string(),
-            TokenValue::Number(n) => n.to_string(),
-            TokenValue::Bool(b) => b.to_string(),
-            TokenValue::Nil => "nil".to_string(),
+            LiteralValue::String(s) => s.to_string(),
+            LiteralValue::Number(n) => n.to_string(),
+            LiteralValue::Bool(b) => b.to_string(),
+            LiteralValue::Nil => "nil".to_string(),
         }
     }
 
@@ -69,7 +69,7 @@ impl Visitor<String, String> for AstPrinter {
         format!(
             "( {} {} {} )",
             self.visit_expr(&*b.left),
-            b.operator.lexeme,
+            b.operator,
             self.visit_expr(&*b.right)
         )
     }
@@ -79,11 +79,11 @@ impl Visitor<String, String> for AstPrinter {
     }
 
     fn visit_unary_expr(&mut self, u: &UnaryExpr) -> String {
-        format!("( {} {} )", u.operator.lexeme, self.visit_expr(&*u.right))
+        format!("( {} {} )", u.operator, self.visit_expr(&*u.right))
     }
 
-    fn visit_variable(&mut self, t: &Token) -> String {
-        format!("variable ( {} )", t.lexeme)
+    fn visit_variable(&mut self, v: &String) -> String {
+        format!("variable ( {} )", v)
     }
 
     fn visit_assign(&mut self, a: &AssignExpr) -> String {
@@ -94,7 +94,7 @@ impl Visitor<String, String> for AstPrinter {
         format!(
             "logic ( {} ) {} ( {} )",
             self.visit_expr(&l.left),
-            l.operator.lexeme,
+            l.operator,
             self.visit_expr(&l.right)
         )
     }
@@ -119,7 +119,7 @@ impl Visitor<String, String> for AstPrinter {
         format!("{} ;", self.visit_expr(e))
     }
     fn visit_var_decl_stmt(&mut self, v: &VarDecl) -> String {
-        let mut s = format!("var {}", v.name.lexeme).to_string();
+        let mut s = format!("var {}", v.name).to_string();
 
         if let Some(initializer) = &v.initializer {
             s.push_str(&format!(" = ( {} )", self.visit_expr(&initializer)));
@@ -151,27 +151,21 @@ impl Visitor<String, String> for AstPrinter {
         )
         .to_string()
     }
-    fn visit_function_stmt(&mut self, f: &FunctionStmt) -> String {
+    fn visit_function_stmt(&mut self, _f: &FunctionStmt) -> String {
         format!(" TODO ").to_string()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::scanner::{Token, TokenType, TokenValue};
     use crate::visitor::*;
 
     #[test]
     fn print_binary_expr() {
         let expr = Expr::Binary(BinaryExpr {
-            left: Box::new(Expr::Literal(TokenValue::Number(5.0))),
-            operator: Token {
-                token_type: TokenType::Plus,
-                lexeme: "+",
-                value: None,
-                line: 0,
-            },
-            right: Box::new(Expr::Literal(TokenValue::Number(4.0))),
+            left: Box::new(Expr::Literal(LiteralValue::Number(5.0))),
+            operator: Operator::Plus,
+            right: Box::new(Expr::Literal(LiteralValue::Number(4.0))),
         });
         let mut printer = AstPrinter {};
         assert_eq!(printer.visit_expr(&expr), "( 5 + 4 )");
@@ -179,7 +173,7 @@ mod tests {
 
     #[test]
     fn print_grouping_expr() {
-        let expr = Expr::Grouping(Box::new(Expr::Literal(TokenValue::Number(5.0))));
+        let expr = Expr::Grouping(Box::new(Expr::Literal(LiteralValue::Number(5.0))));
         let mut printer = AstPrinter {};
         assert_eq!(printer.visit_expr(&expr), "group ( 5 )");
     }
@@ -188,11 +182,11 @@ mod tests {
     fn print_literal() {
         let mut printer = AstPrinter {};
         assert_eq!(
-            printer.visit_expr(&Expr::Literal(TokenValue::Number(1.0))),
+            printer.visit_expr(&Expr::Literal(LiteralValue::Number(1.0))),
             "1"
         );
         assert_eq!(
-            printer.visit_expr(&Expr::Literal(TokenValue::String("hi"))),
+            printer.visit_expr(&Expr::Literal(LiteralValue::String("hi".to_string()))),
             "hi"
         );
     }
@@ -202,13 +196,8 @@ mod tests {
         let mut printer = AstPrinter {};
         assert_eq!(
             printer.visit_expr(&Expr::Unary(UnaryExpr {
-                operator: Token {
-                    token_type: TokenType::Minus,
-                    line: 0,
-                    lexeme: "-",
-                    value: None,
-                },
-                right: Box::new(Expr::Literal(TokenValue::Number(5.0))),
+                operator: Operator::Minus,
+                right: Box::new(Expr::Literal(LiteralValue::Number(5.0))),
             })),
             "( - 5 )"
         );
