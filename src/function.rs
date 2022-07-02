@@ -9,11 +9,15 @@ use crate::{
 #[derive(Debug)]
 pub struct Function {
     decl: Rc<ast::FunctionStmt>,
+    closure: Rc<RefCell<env::Env>>,
 }
 
 impl Function {
-    pub fn new(decl: &Rc<ast::FunctionStmt>) -> Function {
-        Function { decl: decl.clone() }
+    pub fn new(decl: &Rc<ast::FunctionStmt>, closure: Rc<RefCell<env::Env>>) -> Function {
+        Function {
+            decl: decl.clone(),
+            closure,
+        }
     }
 }
 
@@ -24,7 +28,7 @@ impl eval::Callable for Function {
         args: Vec<eval::Value>,
     ) -> anyhow::Result<eval::Value, RuntimeError> {
         // Make environment
-        let env = Rc::new(RefCell::new(env::Env::with_parent(interpreter.globals())));
+        let env = Rc::new(RefCell::new(env::Env::with_parent(self.closure.clone())));
 
         {
             let mut env_mut = env.borrow_mut();
@@ -32,6 +36,7 @@ impl eval::Callable for Function {
                 env_mut.define(self.decl.params[i].clone(), args[i].clone());
             }
         }
+
         let result = interpreter.execute_block(&self.decl.body, env);
         let value = match result {
             Err(RuntimeError::Return(v)) => v,

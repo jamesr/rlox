@@ -8,6 +8,7 @@ use crate::{error::RuntimeError, eval};
 
 type Values = HashMap<String, eval::Value>;
 
+#[derive(Debug)]
 pub struct Env {
     parent: Option<Rc<RefCell<Env>>>,
     values: Values,

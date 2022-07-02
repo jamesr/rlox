@@ -332,7 +332,7 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
 
     fn visit_function_stmt(&mut self, decl: &Rc<ast::FunctionStmt>) -> StmtResult {
         let fun: by_address::ByAddress<Rc<dyn Callable>> =
-            by_address::ByAddress(Rc::new(function::Function::new(decl)));
+            by_address::ByAddress(Rc::new(function::Function::new(decl, self.env.clone())));
         let value: Value = Value::Callable(fun);
         self.env_mut().define(decl.name.to_string(), value);
 
