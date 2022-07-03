@@ -1,4 +1,4 @@
-use std::{cell::RefCell, fmt::Display, rc::Rc, time::Instant};
+use std::{cell::RefCell, collections::HashMap, fmt::Display, rc::Rc, time::Instant};
 
 use crate::{
     ast, env,
@@ -42,7 +42,7 @@ pub struct Interpreter {
     env: Rc<RefCell<env::Env>>,
     globals: Rc<RefCell<env::Env>>,
     errors: Vec<error::Error>,
-    //locals: HashMap<by_address::ByAddress<&ast::Expr>, usize>,
+    locals: HashMap<u64, usize>,
 }
 
 type ExprResult = anyhow::Result<Value, RuntimeError>;
@@ -61,7 +61,7 @@ impl Interpreter {
             env: globals.clone(),
             globals,
             errors: vec![],
-            //locals: HashMap::new(),
+            locals: HashMap::new(),
         }
     }
 
@@ -115,6 +115,34 @@ impl Interpreter {
         self.env = previous;
 
         result
+    }
+
+    pub fn resolve(&mut self, expr_id: u64, depth: usize) {
+        self.locals.insert(expr_id, depth);
+    }
+
+    fn lookup_variable(&mut self, name: &String, expr_id: u64) -> ExprResult {
+        let env = match self.locals.get(&expr_id) {
+            Some(depth) => env::ancestor(&self.env, *depth),
+            None => Some(self.globals.clone()),
+        }
+        .unwrap();
+
+        let env_ref = env.borrow();
+
+        env_ref.get(name)
+    }
+
+    fn assign_variable(&mut self, name: &String, value: Value, expr_id: u64) {
+        let env = match self.locals.get(&expr_id) {
+            Some(depth) => env::ancestor(&self.env, *depth),
+            None => Some(self.globals.clone()),
+        }
+        .unwrap();
+
+        let mut env_ref = env.borrow_mut();
+
+        env_ref.assign(name.clone(), value).unwrap();
     }
 }
 
@@ -259,12 +287,12 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
     }
 
     fn visit_variable(&mut self, v: &ast::VariableExpr) -> ExprResult {
-        self.env().borrow().get(v.name.to_string())
+        self.lookup_variable(&v.name, v.id())
     }
 
     fn visit_assign(&mut self, a: &ast::AssignExpr) -> ExprResult {
         let value = self.visit_expr(&*a.value)?;
-        self.env_mut().assign(a.name.to_string(), value.clone())?;
+        self.assign_variable(&a.name, value.clone(), a.id());
         Ok(value)
     }
 
@@ -344,17 +372,19 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
 
 #[cfg(test)]
 mod tests {
-    use crate::{error, eval::Value, parser::parse_expression};
+    use crate::{error, eval::Value, parser::parse_expression, resolver};
 
     use super::Interpreter;
 
     macro_rules! eval_string_expr_test {
         ($name:ident, $source:expr, $expected_value:expr) => {
             #[test]
-            fn $name() -> anyhow::Result<(), error::Error> {
+            fn $name() -> anyhow::Result<(), anyhow::Error> {
                 let mut interpreter = Interpreter::new();
 
                 let expr = parse_expression($source)?;
+                let mut resolver = resolver::Resolver::new(&mut interpreter);
+                resolver.resolve_expr(&expr)?;
                 assert_eq!(interpreter.interpret_expr(&expr)?, $expected_value);
                 Ok(())
             }
@@ -400,6 +430,8 @@ mod tests {
                     use crate::visitor::Visitor;
                     printer.visit_stmt(&stmt);
                 }
+                let mut resolver = resolver::Resolver::new(&mut interpreter);
+                resolver.resolve(&stmts)?;
                 interpreter.interpret(&stmts)?;
 
                 let all_tests_passed_expr = crate::parser::parse_expression("all_tests_passed")?;

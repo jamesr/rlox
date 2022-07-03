@@ -21,6 +21,8 @@ fn run(source: &str, interpreter: &mut Interpreter) -> anyhow::Result<(), anyhow
             return Err(error::convert_parse(&v));
         }
     };
+    let mut resolver = resolver::Resolver::new(interpreter);
+    resolver.resolve(&stmts)?;
     interpreter.interpret(&stmts)?;
     if interpreter.has_error() {
         for e in interpreter.errors() {

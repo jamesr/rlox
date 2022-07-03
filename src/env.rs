@@ -14,6 +14,24 @@ pub struct Env {
     values: Values,
 }
 
+pub fn ancestor(start: &Rc<RefCell<Env>>, depth: usize) -> Option<Rc<RefCell<Env>>> {
+    let mut node = Some(start.clone());
+
+    for _ in 0..depth {
+        let mut next = None;
+        if let Some(ref node) = node {
+            let bn = node.borrow();
+            next = bn.parent.clone();
+        }
+        if next.is_none() {
+            return None;
+        }
+        node = next;
+    }
+
+    node
+}
+
 impl Env {
     pub fn new() -> Env {
         Env {
@@ -33,30 +51,17 @@ impl Env {
         self.values.insert(name, value);
     }
 
-    fn find(&self, name: &String) -> Option<eval::Value> {
+    pub fn get(&self, name: &String) -> anyhow::Result<eval::Value, RuntimeError> {
         if let Some(v) = self.values.get(name) {
-            return Some(v.clone());
+            return Ok(v.clone());
         }
-        if let Some(parent) = self.parent.clone() {
-            return parent.borrow().find(name);
-        }
-        None
-    }
-
-    pub fn get(&self, name: String) -> anyhow::Result<eval::Value, RuntimeError> {
-        match self.find(&name) {
-            Some(v) => Ok(v.clone()),
-            None => Err(format!("Undefined variable '{}'.", name).into()),
-        }
+        Err(format!("variable {} not found", name).into())
     }
 
     pub fn assign(&mut self, name: String, value: eval::Value) -> anyhow::Result<(), RuntimeError> {
         if let hash_map::Entry::Occupied(mut entry) = self.values.entry(name.clone()) {
             entry.insert(value);
             return Ok(());
-        }
-        if let Some(parent) = &self.parent {
-            return parent.borrow_mut().assign(name.clone(), value);
         }
         Err(format!("Undefined variable '{}'.", name).into())
     }
