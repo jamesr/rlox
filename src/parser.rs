@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::ast::{AssignExpr, FunctionStmt, IfStmt, LiteralValue, LogicalExpr, WhileStmt};
+use crate::ast::{FunctionStmt, IfStmt, WhileStmt};
 use crate::scanner::{Scanner, Token, TokenType, TokenValue};
 use crate::{ast, error};
 
@@ -289,8 +289,8 @@ impl<'a> Parser<'a> {
         if self.matches(&[TokenType::Equal])? {
             let value = self.assignment()?;
 
-            if let ast::Expr::Variable(name) = *expr {
-                return Ok(Box::new(ast::Expr::Assign(AssignExpr { name, value })));
+            if let ast::Expr::Variable(v) = *expr {
+                return Ok(Box::new(ast::Expr::assign(v.name, value)));
             }
         }
 
@@ -304,11 +304,7 @@ impl<'a> Parser<'a> {
         while self.matches(&[TokenType::Or])? {
             let operator = self.operator()?;
             let right = self.logic_and()?;
-            expr = Box::new(ast::Expr::Logical(LogicalExpr {
-                left: expr,
-                operator,
-                right,
-            }));
+            expr = Box::new(ast::Expr::logical(expr, operator, right));
         }
 
         Ok(expr)
@@ -320,11 +316,7 @@ impl<'a> Parser<'a> {
         while self.matches(&[TokenType::And])? {
             let operator = self.operator()?;
             let right = self.equality()?;
-            expr = Box::new(ast::Expr::Logical(LogicalExpr {
-                left: expr,
-                operator,
-                right,
-            }));
+            expr = Box::new(ast::Expr::logical(expr, operator, right));
         }
 
         Ok(expr)
@@ -337,11 +329,7 @@ impl<'a> Parser<'a> {
         while self.matches(&[TokenType::BangEqual, TokenType::EqualEqual])? {
             let operator = self.operator()?;
             let right = self.comparison()?;
-            expr = Box::new(ast::Expr::Binary(ast::BinaryExpr {
-                left: expr,
-                operator,
-                right,
-            }));
+            expr = Box::new(ast::Expr::binary(expr, operator, right));
         }
 
         Ok(expr)
@@ -359,11 +347,7 @@ impl<'a> Parser<'a> {
         ])? {
             let operator = self.operator()?;
             let right = self.term()?;
-            expr = Box::new(ast::Expr::Binary(ast::BinaryExpr {
-                left: expr,
-                operator,
-                right,
-            }))
+            expr = Box::new(ast::Expr::binary(expr, operator, right));
         }
 
         Ok(expr)
@@ -376,11 +360,7 @@ impl<'a> Parser<'a> {
         while self.matches(&[TokenType::Minus, TokenType::Plus])? {
             let operator = self.operator()?;
             let right = self.factor()?;
-            expr = Box::new(ast::Expr::Binary(ast::BinaryExpr {
-                left: expr,
-                operator,
-                right,
-            }))
+            expr = Box::new(ast::Expr::binary(expr, operator, right));
         }
 
         Ok(expr)
@@ -393,11 +373,7 @@ impl<'a> Parser<'a> {
         while self.matches(&[TokenType::Slash, TokenType::Star])? {
             let operator = self.operator()?;
             let right = self.unary()?;
-            expr = Box::new(ast::Expr::Binary(ast::BinaryExpr {
-                left: expr,
-                operator,
-                right,
-            }))
+            expr = Box::new(ast::Expr::binary(expr, operator, right));
         }
 
         Ok(expr)
@@ -408,10 +384,7 @@ impl<'a> Parser<'a> {
         if self.matches(&[TokenType::Bang, TokenType::Minus])? {
             let operator = self.operator()?;
             let right = self.unary()?;
-            return Ok(Box::new(ast::Expr::Unary(ast::UnaryExpr {
-                operator,
-                right,
-            })));
+            return Ok(Box::new(ast::Expr::unary(operator, right)));
         }
         self.call()
     }
@@ -449,7 +422,7 @@ impl<'a> Parser<'a> {
 
         self.consume(TokenType::RightParen, "Expect ')' after arguments.")?;
 
-        Ok(Box::new(ast::Expr::Call(ast::CallExpr { callee, args })))
+        Ok(Box::new(ast::Expr::call(callee, args)))
     }
 
     // primary  → "true" | "false" | "nil"
@@ -458,33 +431,32 @@ impl<'a> Parser<'a> {
     //          | IDENTIFIER ;
     fn primary(&self) -> ExprResult {
         if self.matches(&[TokenType::True])? {
-            return Ok(Box::new(ast::Expr::Literal(LiteralValue::Bool(true))));
+            return Ok(Box::new(ast::Expr::literal_bool(true)));
         }
         if self.matches(&[TokenType::False])? {
-            return Ok(Box::new(ast::Expr::Literal(LiteralValue::Bool(false))));
+            return Ok(Box::new(ast::Expr::literal_bool(false)));
         }
         if self.matches(&[TokenType::Nil])? {
-            return Ok(Box::new(ast::Expr::Literal(LiteralValue::Nil)));
+            return Ok(Box::new(ast::Expr::literal_nil()));
         }
-        if self.matches(&[TokenType::Number, TokenType::String])? {
-            return Ok(Box::new(ast::Expr::Literal(
-                match self.previous().unwrap().value.unwrap() {
-                    TokenValue::Number(n) => LiteralValue::Number(n),
-                    TokenValue::String(s) => LiteralValue::String(s.to_string()),
-                    _ => {
-                        panic!("oops");
-                    }
-                },
-            )));
+        if self.matches(&[TokenType::Number])? {
+            if let TokenValue::Number(n) = self.previous().unwrap().value.unwrap() {
+                return Ok(Box::new(ast::Expr::literal_number(n)));
+            }
+        }
+        if self.matches(&[TokenType::String])? {
+            if let TokenValue::String(s) = self.previous().unwrap().value.unwrap() {
+                return Ok(Box::new(ast::Expr::literal_string(s.to_string())));
+            }
         }
         if self.matches(&[TokenType::LeftParen])? {
             let expr = self.expression()?;
             self.consume(TokenType::RightParen, "Expect ')' after expression.")?;
-            return Ok(Box::new(ast::Expr::Grouping(expr)));
+            return Ok(Box::new(ast::Expr::grouping(expr)));
         }
         if self.matches(&[TokenType::Identifier])? {
             let token = self.previous().unwrap();
-            return Ok(Box::new(ast::Expr::Variable(token.lexeme.to_string())));
+            return Ok(Box::new(ast::Expr::variable(token.lexeme.to_string())));
         }
         Err(self.error("expected expression".to_string()))
     }
@@ -607,7 +579,7 @@ impl<'a> Parser<'a> {
         };
 
         let condition = if self.check(TokenType::Semicolon) {
-            Box::new(ast::Expr::Literal(LiteralValue::Bool(true)))
+            Box::new(ast::Expr::literal_bool(true))
         } else {
             self.expression()?
         };
@@ -683,13 +655,10 @@ mod tests {
     #[test]
     fn literal() -> Result<(), error::ParseError> {
         let false_literal = parse_expression("false")?;
-        assert_eq!(
-            *false_literal,
-            ast::Expr::Literal(LiteralValue::Bool(false))
-        );
+        assert_eq!(*false_literal, ast::Expr::literal_bool(false));
 
         let true_literal = parse_expression("true")?;
-        assert_eq!(*true_literal, ast::Expr::Literal(LiteralValue::Bool(true)));
+        assert_eq!(*true_literal, ast::Expr::literal_bool(true));
 
         Ok(())
     }
@@ -699,19 +668,13 @@ mod tests {
         let unary_minus = parse_expression("- 5")?;
         assert_eq!(
             *unary_minus,
-            ast::Expr::Unary(UnaryExpr {
-                operator: Operator::Minus,
-                right: Box::new(ast::Expr::Literal(LiteralValue::Number(5.0))),
-            })
+            ast::Expr::unary(Operator::Minus, Box::new(ast::Expr::literal_number(5.0)),)
         );
 
         let unary_negate = parse_expression("!false")?;
         assert_eq!(
             *unary_negate,
-            ast::Expr::Unary(UnaryExpr {
-                operator: Operator::Bang,
-                right: Box::new(ast::Expr::Literal(LiteralValue::Bool(false))),
-            })
+            ast::Expr::unary(Operator::Bang, Box::new(ast::Expr::literal_bool(false)),)
         );
         Ok(())
     }
@@ -722,10 +685,7 @@ mod tests {
 
         assert_eq!(
             *assign_simple,
-            ast::Expr::Assign(AssignExpr {
-                name: "foo".to_string(),
-                value: Box::new(ast::Expr::Literal(LiteralValue::Number(3.0))),
-            })
+            ast::Expr::assign("foo".to_string(), Box::new(ast::Expr::literal_number(3.0)),)
         );
 
         Ok(())
@@ -738,8 +698,8 @@ mod tests {
         assert_eq!(
             block[0],
             Box::new(ast::Stmt::Block(vec![Box::new(ast::Stmt::Expr(Box::new(
-                ast::Expr::Literal(LiteralValue::Number(5.0))
-            ),))]))
+                ast::Expr::literal_number(5.0)
+            )))]))
         );
 
         Ok(())
@@ -752,9 +712,9 @@ mod tests {
         assert_eq!(
             if_statement[0],
             Box::new(ast::Stmt::If(IfStmt {
-                condition: Box::new(ast::Expr::Literal(LiteralValue::Bool(true))),
+                condition: Box::new(ast::Expr::literal_bool(true)),
                 then_branch: Box::new(ast::Stmt::Block(vec![Box::new(ast::Stmt::Print(
-                    Box::new(ast::Expr::Literal(LiteralValue::Number(5.0)))
+                    Box::new(ast::Expr::literal_number(5.0))
                 ))])),
                 else_branch: None,
             }))
@@ -783,12 +743,12 @@ mod tests {
         assert_eq!(
             stmts[1],
             Box::new(ast::Stmt::If(IfStmt {
-                condition: Box::new(ast::Expr::Literal(LiteralValue::Bool(true))),
+                condition: Box::new(ast::Expr::literal_bool(true)),
                 then_branch: Box::new(ast::Stmt::Block(vec![Box::new(ast::Stmt::Expr(Box::new(
-                    ast::Expr::Assign(AssignExpr {
-                        name: "all_tests_passed".to_string(),
-                        value: Box::new(ast::Expr::Literal(LiteralValue::Bool(true)))
-                    })
+                    ast::Expr::assign(
+                        "all_tests_passed".to_string(),
+                        Box::new(ast::Expr::literal_bool(true))
+                    )
                 )))])),
                 else_branch: None,
             }))
@@ -805,11 +765,11 @@ mod tests {
 
         assert_eq!(
             stmts[0],
-            Box::new(ast::Stmt::Expr(Box::new(ast::Expr::Logical(LogicalExpr {
-                left: Box::new(ast::Expr::Literal(LiteralValue::Bool(false))),
-                operator: Operator::And,
-                right: Box::new(ast::Expr::Literal(LiteralValue::Bool(true))),
-            }))))
+            Box::new(ast::Stmt::Expr(Box::new(ast::Expr::logical(
+                Box::new(ast::Expr::literal_bool(false)),
+                Operator::And,
+                Box::new(ast::Expr::literal_bool(true)),
+            ))))
         );
 
         assert_eq!(stmts.len(), 1);
@@ -824,19 +784,19 @@ mod tests {
         assert_eq!(
             stmts[0],
             Box::new(ast::Stmt::While(WhileStmt {
-                condition: Box::new(ast::Expr::Binary(BinaryExpr {
-                    left: Box::new(ast::Expr::Variable("i".to_string())),
-                    operator: Operator::Less,
-                    right: Box::new(ast::Expr::Literal(LiteralValue::Number(5.0)))
-                })),
-                body: Box::new(ast::Stmt::Expr(Box::new(ast::Expr::Assign(AssignExpr {
-                    name: "i".to_string(),
-                    value: Box::new(ast::Expr::Binary(BinaryExpr {
-                        left: Box::new(ast::Expr::Variable("i".to_string())),
-                        operator: Operator::Plus,
-                        right: Box::new(ast::Expr::Literal(LiteralValue::Number(1.0)))
-                    }))
-                }))))
+                condition: Box::new(ast::Expr::binary(
+                    Box::new(ast::Expr::variable("i".to_string())),
+                    Operator::Less,
+                    Box::new(ast::Expr::literal_number(5.0))
+                )),
+                body: Box::new(ast::Stmt::Expr(Box::new(ast::Expr::assign(
+                    "i".to_string(),
+                    Box::new(ast::Expr::binary(
+                        Box::new(ast::Expr::variable("i".to_string())),
+                        Operator::Plus,
+                        Box::new(ast::Expr::literal_number(1.0))
+                    ))
+                ))))
             }))
         );
 
@@ -864,29 +824,29 @@ mod tests {
                 // "var i = 0;"
                 Box::new(ast::Stmt::Var(VarDecl {
                     name: "i".to_string(),
-                    initializer: Some(Box::new(ast::Expr::Literal(LiteralValue::Number(0.0))))
-                },)),
+                    initializer: Some(Box::new(ast::Expr::literal_number(0.0)))
+                })),
                 // "while (i < 10) {"
                 Box::new(ast::Stmt::While(WhileStmt {
-                    condition: Box::new(ast::Expr::Binary(BinaryExpr {
-                        left: Box::new(ast::Expr::Variable("i".to_string())),
-                        operator: Operator::Less,
-                        right: Box::new(ast::Expr::Literal(LiteralValue::Number(10.0))),
-                    })),
+                    condition: Box::new(ast::Expr::binary(
+                        Box::new(ast::Expr::variable("i".to_string())),
+                        Operator::Less,
+                        Box::new(ast::Expr::literal_number(10.0)),
+                    )),
                     body: Box::new(ast::Stmt::Block(vec![
                         // "print i;"
-                        Box::new(ast::Stmt::Print(Box::new(ast::Expr::Variable(
+                        Box::new(ast::Stmt::Print(Box::new(ast::Expr::variable(
                             "i".to_string()
                         )))),
                         // "i = i + 1;"
-                        Box::new(ast::Stmt::Expr(Box::new(ast::Expr::Assign(AssignExpr {
-                            name: "i".to_string(),
-                            value: Box::new(ast::Expr::Binary(BinaryExpr {
-                                left: Box::new(ast::Expr::Variable("i".to_string())),
-                                operator: Operator::Plus,
-                                right: Box::new(ast::Expr::Literal(LiteralValue::Number(1.0)),)
-                            }))
-                        }))))
+                        Box::new(ast::Stmt::Expr(Box::new(ast::Expr::assign(
+                            "i".to_string(),
+                            Box::new(ast::Expr::binary(
+                                Box::new(ast::Expr::variable("i".to_string())),
+                                Operator::Plus,
+                                Box::new(ast::Expr::literal_number(1.0)),
+                            ))
+                        ))))
                     ])),
                 },))
             ]))]
@@ -901,13 +861,13 @@ mod tests {
 
         assert_eq!(
             expr,
-            Box::new(ast::Expr::Call(CallExpr {
-                callee: Box::new(ast::Expr::Variable("callback".to_string())),
-                args: vec![
-                    Box::new(ast::Expr::Literal(LiteralValue::Number(5.0))),
-                    Box::new(ast::Expr::Literal(LiteralValue::Bool(true))),
+            Box::new(ast::Expr::call(
+                Box::new(ast::Expr::variable("callback".to_string())),
+                vec![
+                    Box::new(ast::Expr::literal_number(5.0)),
+                    Box::new(ast::Expr::literal_bool(true)),
                 ],
-            }))
+            ))
         );
 
         Ok(())
@@ -923,12 +883,10 @@ mod tests {
             Box::new(ast::Stmt::Function(Rc::new(ast::FunctionStmt {
                 name: "add".to_string(),
                 params: vec!["a".to_string(), "b".to_string(),],
-                body: vec![Box::new(ast::Stmt::Print(Box::new(ast::Expr::Binary(
-                    BinaryExpr {
-                        left: Box::new(ast::Expr::Variable("a".to_string())),
-                        operator: Operator::Plus,
-                        right: Box::new(ast::Expr::Variable("b".to_string()))
-                    }
+                body: vec![Box::new(ast::Stmt::Print(Box::new(ast::Expr::binary(
+                    Box::new(ast::Expr::variable("a".to_string())),
+                    Operator::Plus,
+                    Box::new(ast::Expr::variable("b".to_string()))
                 ))))],
             })))
         );

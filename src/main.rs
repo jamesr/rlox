@@ -10,6 +10,7 @@ pub mod error;
 pub mod eval;
 pub mod function;
 pub mod parser;
+pub mod resolver;
 pub mod scanner;
 pub mod visitor;
 

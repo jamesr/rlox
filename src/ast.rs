@@ -1,15 +1,101 @@
-use std::rc::Rc;
+use std::{rc::Rc, sync::Mutex};
 
 #[derive(PartialEq, Debug)]
 pub enum Expr {
     Unary(UnaryExpr),
     Binary(BinaryExpr),
-    Grouping(Box<Expr>),
-    Literal(LiteralValue),
-    Variable(String),
+    Grouping(GroupingExpr),
+    Literal(LiteralExpr),
+    Variable(VariableExpr),
     Assign(AssignExpr),
     Logical(LogicalExpr),
     Call(CallExpr),
+}
+
+impl Expr {
+    pub fn unary(operator: Operator, right: Box<Expr>) -> Expr {
+        Expr::Unary(UnaryExpr {
+            id: generate_expr_id(),
+            operator,
+            right,
+        })
+    }
+
+    pub fn binary(left: Box<Expr>, operator: Operator, right: Box<Expr>) -> Expr {
+        Expr::Binary(BinaryExpr {
+            id: generate_expr_id(),
+            left,
+            operator,
+            right,
+        })
+    }
+
+    pub fn grouping(expr: Box<Expr>) -> Expr {
+        Expr::Grouping(GroupingExpr {
+            id: generate_expr_id(),
+            expr,
+        })
+    }
+
+    pub fn literal_string(s: String) -> Expr {
+        Expr::Literal(LiteralExpr {
+            id: generate_expr_id(),
+            value: LiteralValue::String(s),
+        })
+    }
+
+    pub fn literal_number(n: f64) -> Expr {
+        Expr::Literal(LiteralExpr {
+            id: generate_expr_id(),
+            value: LiteralValue::Number(n),
+        })
+    }
+
+    pub fn literal_bool(b: bool) -> Expr {
+        Expr::Literal(LiteralExpr {
+            id: generate_expr_id(),
+            value: LiteralValue::Bool(b),
+        })
+    }
+
+    pub fn literal_nil() -> Expr {
+        Expr::Literal(LiteralExpr {
+            id: generate_expr_id(),
+            value: LiteralValue::Nil,
+        })
+    }
+
+    pub fn variable(name: String) -> Expr {
+        Expr::Variable(VariableExpr {
+            id: generate_expr_id(),
+            name,
+        })
+    }
+
+    pub fn assign(name: String, value: Box<Expr>) -> Expr {
+        Expr::Assign(AssignExpr {
+            id: generate_expr_id(),
+            name,
+            value,
+        })
+    }
+
+    pub fn logical(left: Box<Expr>, operator: Operator, right: Box<Expr>) -> Expr {
+        Expr::Logical(LogicalExpr {
+            id: generate_expr_id(),
+            left,
+            operator,
+            right,
+        })
+    }
+
+    pub fn call(callee: Box<Expr>, args: Vec<Box<Expr>>) -> Expr {
+        Expr::Call(CallExpr {
+            id: generate_expr_id(),
+            callee,
+            args,
+        })
+    }
 }
 
 #[derive(PartialEq, Debug)]
@@ -30,17 +116,31 @@ pub enum Operator {
     Or,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(Debug)]
 pub struct UnaryExpr {
+    id: u64,
     pub operator: Operator,
     pub right: Box<Expr>,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(Debug)]
 pub struct BinaryExpr {
+    id: u64,
     pub left: Box<Expr>,
     pub operator: Operator,
     pub right: Box<Expr>,
+}
+
+#[derive(Debug)]
+pub struct GroupingExpr {
+    id: u64,
+    pub expr: Box<Expr>,
+}
+
+#[derive(Debug)]
+pub struct LiteralExpr {
+    id: u64,
+    pub value: LiteralValue,
 }
 
 #[derive(PartialEq, Debug)]
@@ -51,21 +151,30 @@ pub enum LiteralValue {
     Nil,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(Debug)]
+pub struct VariableExpr {
+    id: u64,
+    pub name: String,
+}
+
+#[derive(Debug)]
 pub struct AssignExpr {
+    id: u64,
     pub name: String,
     pub value: Box<Expr>,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(Debug)]
 pub struct LogicalExpr {
+    id: u64,
     pub left: Box<Expr>,
     pub operator: Operator,
     pub right: Box<Expr>,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(Debug)]
 pub struct CallExpr {
+    id: u64,
     pub callee: Box<Expr>,
     pub args: Vec<Box<Expr>>,
     // TODO: Track source location for error reporting
@@ -132,4 +241,61 @@ impl std::fmt::Display for Operator {
             }
         )
     }
+}
+
+/*
+impl PartialEq for UnaryExpr {
+    fn eq(&self, other: &Self) -> bool {
+        self.operator == other.operator && self.right == other.right
+    }
+}
+
+impl Eq for UnaryExpr {}
+*/
+
+macro_rules! partial_eq_expr_field_eq {
+    ($self:ident, $other:ident, $field:ident) => {
+        $self.$field == $other.$field
+    };
+
+    ($self:ident, $other:ident, $field:ident, $($fields:ident),+) => {
+        partial_eq_expr_field_eq!($self, $other, $field) &&
+        partial_eq_expr_field_eq!($self, $other, $($fields),+)
+    };
+}
+
+macro_rules! expr_impl {
+    ($expr:ident, $($fields:ident),+) => {
+        impl $expr {
+            pub fn id(self: &$expr) -> u64 { self.id }
+        }
+
+        impl PartialEq for $expr {
+            fn eq(self: &$expr, other: &Self) -> bool {
+                partial_eq_expr_field_eq!(self, other, $($fields),+)
+            }
+        }
+
+        impl Eq for $expr {}
+    };
+}
+
+expr_impl!(UnaryExpr, operator, right);
+expr_impl!(BinaryExpr, left, operator, right);
+expr_impl!(GroupingExpr, expr);
+expr_impl!(LiteralExpr, value);
+expr_impl!(VariableExpr, name);
+expr_impl!(AssignExpr, name, value);
+expr_impl!(LogicalExpr, left, operator, right);
+expr_impl!(CallExpr, callee, args);
+
+lazy_static::lazy_static! {
+    static ref NEXT_EXPR_ID: std::sync::Mutex<u64> = Mutex::new(0);
+}
+
+fn generate_expr_id() -> u64 {
+    let mut next_expr_id = NEXT_EXPR_ID.lock().unwrap();
+    let id = *next_expr_id;
+    *next_expr_id = id + 1;
+    id
 }

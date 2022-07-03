@@ -42,6 +42,7 @@ pub struct Interpreter {
     env: Rc<RefCell<env::Env>>,
     globals: Rc<RefCell<env::Env>>,
     errors: Vec<error::Error>,
+    //locals: HashMap<by_address::ByAddress<&ast::Expr>, usize>,
 }
 
 type ExprResult = anyhow::Result<Value, RuntimeError>;
@@ -60,6 +61,7 @@ impl Interpreter {
             env: globals.clone(),
             globals,
             errors: vec![],
+            //locals: HashMap::new(),
         }
     }
 
@@ -169,8 +171,8 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
         self.errors.push(e)
     }
 
-    fn visit_literal(&mut self, v: &ast::LiteralValue) -> ExprResult {
-        Ok(match v {
+    fn visit_literal(&mut self, v: &ast::LiteralExpr) -> ExprResult {
+        Ok(match &v.value {
             ast::LiteralValue::String(s) => Value::String(s.to_string()),
             ast::LiteralValue::Number(n) => Value::Number(*n),
             ast::LiteralValue::Bool(b) => Value::Bool(*b),
@@ -239,8 +241,8 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
         }
     }
 
-    fn visit_grouping_expr(&mut self, e: &ast::Expr) -> ExprResult {
-        self.visit_expr(e)
+    fn visit_grouping_expr(&mut self, e: &ast::GroupingExpr) -> ExprResult {
+        self.visit_expr(&e.expr)
     }
 
     fn visit_unary_expr(&mut self, e: &ast::UnaryExpr) -> ExprResult {
@@ -256,8 +258,8 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
         }
     }
 
-    fn visit_variable(&mut self, name: &String) -> ExprResult {
-        self.env().borrow().get(name.to_string())
+    fn visit_variable(&mut self, v: &ast::VariableExpr) -> ExprResult {
+        self.env().borrow().get(v.name.to_string())
     }
 
     fn visit_assign(&mut self, a: &ast::AssignExpr) -> ExprResult {

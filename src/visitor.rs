@@ -6,7 +6,7 @@ pub trait Visitor<ExprResult, StmtResult> {
     fn expr_result_to_stmt_result(&self, e: ExprResult) -> StmtResult;
     fn report_error(&mut self, _: error::Error) {}
 
-    fn visit_literal(&mut self, v: &LiteralValue) -> ExprResult;
+    fn visit_literal(&mut self, v: &LiteralExpr) -> ExprResult;
     fn visit_expr(&mut self, e: &Expr) -> ExprResult {
         use Expr::*;
         match e {
@@ -14,16 +14,16 @@ pub trait Visitor<ExprResult, StmtResult> {
             Grouping(g) => self.visit_grouping_expr(g),
             Literal(l) => self.visit_literal(l),
             Unary(u) => self.visit_unary_expr(u),
-            Variable(s) => self.visit_variable(s),
+            Variable(v) => self.visit_variable(v),
             Assign(a) => self.visit_assign(a),
             Logical(a) => self.visit_logical(a),
             Call(c) => self.visit_call(c),
         }
     }
     fn visit_binary_expr(&mut self, e: &BinaryExpr) -> ExprResult;
-    fn visit_grouping_expr(&mut self, e: &Expr) -> ExprResult;
+    fn visit_grouping_expr(&mut self, e: &GroupingExpr) -> ExprResult;
     fn visit_unary_expr(&mut self, e: &UnaryExpr) -> ExprResult;
-    fn visit_variable(&mut self, s: &String) -> ExprResult;
+    fn visit_variable(&mut self, s: &VariableExpr) -> ExprResult;
     fn visit_assign(&mut self, a: &AssignExpr) -> ExprResult;
     fn visit_logical(&mut self, l: &LogicalExpr) -> ExprResult;
     fn visit_call(&mut self, c: &CallExpr) -> ExprResult;
@@ -60,8 +60,8 @@ impl Visitor<String, String> for AstPrinter {
         e
     }
 
-    fn visit_literal(&mut self, v: &LiteralValue) -> String {
-        match v {
+    fn visit_literal(&mut self, v: &LiteralExpr) -> String {
+        match &v.value {
             LiteralValue::String(s) => s.to_string(),
             LiteralValue::Number(n) => n.to_string(),
             LiteralValue::Bool(b) => b.to_string(),
@@ -78,16 +78,16 @@ impl Visitor<String, String> for AstPrinter {
         )
     }
 
-    fn visit_grouping_expr(&mut self, e: &Expr) -> String {
-        format!("group ( {} )", self.visit_expr(&*e))
+    fn visit_grouping_expr(&mut self, e: &GroupingExpr) -> String {
+        format!("group ( {} )", self.visit_expr(&e.expr))
     }
 
     fn visit_unary_expr(&mut self, u: &UnaryExpr) -> String {
         format!("( {} {} )", u.operator, self.visit_expr(&*u.right))
     }
 
-    fn visit_variable(&mut self, v: &String) -> String {
-        format!("variable ( {} )", v)
+    fn visit_variable(&mut self, v: &VariableExpr) -> String {
+        format!("variable ( {} )", v.name)
     }
 
     fn visit_assign(&mut self, a: &AssignExpr) -> String {
@@ -172,18 +172,18 @@ mod tests {
 
     #[test]
     fn print_binary_expr() {
-        let expr = Expr::Binary(BinaryExpr {
-            left: Box::new(Expr::Literal(LiteralValue::Number(5.0))),
-            operator: Operator::Plus,
-            right: Box::new(Expr::Literal(LiteralValue::Number(4.0))),
-        });
+        let expr = Expr::binary(
+            Box::new(Expr::literal_number(5.0)),
+            Operator::Plus,
+            Box::new(Expr::literal_number(4.0)),
+        );
         let mut printer = AstPrinter {};
         assert_eq!(printer.visit_expr(&expr), "( 5 + 4 )");
     }
 
     #[test]
     fn print_grouping_expr() {
-        let expr = Expr::Grouping(Box::new(Expr::Literal(LiteralValue::Number(5.0))));
+        let expr = Expr::grouping(Box::new(Expr::literal_number(5.0)));
         let mut printer = AstPrinter {};
         assert_eq!(printer.visit_expr(&expr), "group ( 5 )");
     }
@@ -191,12 +191,9 @@ mod tests {
     #[test]
     fn print_literal() {
         let mut printer = AstPrinter {};
+        assert_eq!(printer.visit_expr(&Expr::literal_number(1.0)), "1");
         assert_eq!(
-            printer.visit_expr(&Expr::Literal(LiteralValue::Number(1.0))),
-            "1"
-        );
-        assert_eq!(
-            printer.visit_expr(&Expr::Literal(LiteralValue::String("hi".to_string()))),
+            printer.visit_expr(&Expr::literal_string("hi".to_string())),
             "hi"
         );
     }
@@ -205,10 +202,10 @@ mod tests {
     fn print_unary() {
         let mut printer = AstPrinter {};
         assert_eq!(
-            printer.visit_expr(&Expr::Unary(UnaryExpr {
-                operator: Operator::Minus,
-                right: Box::new(Expr::Literal(LiteralValue::Number(5.0))),
-            })),
+            printer.visit_expr(&Expr::unary(
+                Operator::Minus,
+                Box::new(Expr::literal_number(5.0)),
+            )),
             "( - 5 )"
         );
     }
