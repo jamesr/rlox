@@ -10,8 +10,16 @@ enum VariableState {
     Declared,
     Defined,
 }
+
+#[derive(PartialEq, Clone, Copy)]
+enum FunctionType {
+    None,
+    Function,
+}
+
 pub struct Resolver<'a> {
     scopes: Vec<HashMap<String, VariableState>>,
+    current_function: FunctionType,
     interpreter: &'a mut Interpreter,
 }
 
@@ -21,6 +29,7 @@ impl<'a> Resolver<'a> {
     pub fn new(interpreter: &'a mut Interpreter) -> Resolver<'a> {
         Resolver {
             scopes: vec![],
+            current_function: FunctionType::None,
             interpreter,
         }
     }
@@ -56,7 +65,9 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn resolve_function(&mut self, f: &ast::FunctionStmt) -> Result {
+    fn resolve_function(&mut self, f: &ast::FunctionStmt, fun_type: FunctionType) -> Result {
+        let enclosing_function = self.current_function;
+        self.current_function = fun_type;
         self.begin_scope();
 
         for p in &f.params {
@@ -67,6 +78,7 @@ impl<'a> Resolver<'a> {
         self.resolve(&f.body)?;
 
         self.end_scope();
+        self.current_function = enclosing_function;
         Ok(())
     }
 
@@ -150,6 +162,9 @@ impl visitor::Visitor<Result, Result> for Resolver<'_> {
     }
 
     fn visit_return_stmt(&mut self, r: &Option<Box<ast::Expr>>) -> Result {
+        if self.current_function != FunctionType::Function {
+            return Err(anyhow!("Can't return from top-level code."));
+        }
         if let Some(e) = r {
             self.visit_expr(e)?;
         }
@@ -183,7 +198,7 @@ impl visitor::Visitor<Result, Result> for Resolver<'_> {
         self.declare(f.name.clone());
         self.define(f.name.clone());
 
-        self.resolve_function(f)?;
+        self.resolve_function(f, FunctionType::Function)?;
         Ok(())
     }
 }
