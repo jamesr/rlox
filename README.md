@@ -26,8 +26,11 @@ The abstract syntax tree uses Rust's enum and struct types and
 are hand written. The book uses Java's dynamic type system and
 a code generation mechanism for these. The Rust types could probably be generated more easily using macros. The AST currently defines a single visitor type for both expressions and statements and does not have a way for the expression visitor to return any side effects. This will need to change to generate and handle errors during evaluation.
 
-The lifetime of AST nodes is tied to the lifetime of the scanner as tokens in the AST contain references to string slices out of the original source code. It might make sense to copy string values when constructing the AST to separate the lifetime from the original source.
+Expressions contain an embedded identifier which is used during the resolution
+and execution passes to resolve variable lookups to the correct scope.
 
 ## Parser
 
-The parser generally follows the book except that it uses Rust's result types instead of exceptions and error reporting functions. Recoverable and unrecoverable errors are not separated out and panic recovery is not implemented.
+The parser generally follows the book except that it uses Rust's result types
+instead of exceptions and error reporting functions. The parser attempts to
+synchronize after errors inside statements and then returns the original error.
