@@ -190,6 +190,7 @@ pub enum Stmt {
     If(IfStmt),
     While(WhileStmt),
     Function(Rc<FunctionStmt>),
+    Class(ClassStmt),
 }
 
 #[derive(PartialEq, Debug)]
@@ -218,6 +219,12 @@ pub struct FunctionStmt {
     pub body: Vec<Box<Stmt>>,
 }
 
+#[derive(PartialEq, Debug)]
+pub struct ClassStmt {
+    pub name: String,
+    pub methods: Vec<Rc<FunctionStmt>>,
+}
+
 impl std::fmt::Display for Operator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -242,16 +249,6 @@ impl std::fmt::Display for Operator {
         )
     }
 }
-
-/*
-impl PartialEq for UnaryExpr {
-    fn eq(&self, other: &Self) -> bool {
-        self.operator == other.operator && self.right == other.right
-    }
-}
-
-impl Eq for UnaryExpr {}
-*/
 
 macro_rules! partial_eq_expr_field_eq {
     ($self:ident, $other:ident, $field:ident) => {

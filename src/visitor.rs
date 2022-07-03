@@ -42,6 +42,7 @@ pub trait Visitor<ExprResult, StmtResult> {
             If(i) => self.visit_if_stmt(i),
             While(i) => self.visit_while_stmt(i),
             Function(f) => self.visit_function_stmt(f),
+            Class(c) => panic!("class"),
         }
     }
 

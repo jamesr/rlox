@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::ast::{FunctionStmt, IfStmt, WhileStmt};
+use crate::ast::{ClassStmt, FunctionStmt, IfStmt, WhileStmt};
 use crate::scanner::{Scanner, Token, TokenType, TokenValue};
 use crate::{ast, error};
 
@@ -86,9 +86,12 @@ impl<'a> Parser<'a> {
         Ok(statements)
     }
 
-    // declaration → funDecl | varDecl | statement ;
+    // declaration → classDecl | funDecl | varDecl | statement ;
     fn declaration(&self) -> StmtResult {
         match (|| {
+            if self.matches(&[TokenType::Class])? {
+                return self.class_decl();
+            }
             if self.matches(&[TokenType::Fun])? {
                 return self.fun_decl("function");
             }
@@ -107,10 +110,30 @@ impl<'a> Parser<'a> {
         }
     }
 
+    //  classDecl → "class" IDENTIFIER "{" function* "}" ;
+    fn class_decl(&self) -> StmtResult {
+        self.consume(TokenType::Identifier, "Expect class name.")?;
+        let name = self.previous().unwrap().lexeme.to_string();
+        self.consume(TokenType::LeftBrace, "Expect '{' before class body.")?;
+
+        let mut methods = vec![];
+        while !self.check(TokenType::RightBrace) && !self.at_end() {
+            methods.push(self.function("method")?);
+        }
+
+        self.consume(TokenType::RightBrace, "Expect '}' after class body.")?;
+
+        Ok(Box::new(ast::Stmt::Class(ClassStmt { name, methods })))
+    }
+
     // funDecl → "fun" function ;
+    fn fun_decl(&self, kind: &str) -> StmtResult {
+        Ok(Box::new(ast::Stmt::Function(self.function(kind)?)))
+    }
+
     // function → IDENTIFIER "(" parameters? ")" block ;
     // parameters → IDENTIFIER ( "," IDENTIFIER )* ;
-    fn fun_decl(&self, kind: &str) -> StmtResult {
+    fn function(&self, kind: &str) -> anyhow::Result<Rc<FunctionStmt>, error::ParseError> {
         self.consume(TokenType::Identifier, &format!("Expect {} name.", kind))?;
         let name = self.previous().unwrap().lexeme.to_string();
         self.consume(
@@ -142,11 +165,7 @@ impl<'a> Parser<'a> {
 
         let body = self.block()?;
 
-        Ok(Box::new(ast::Stmt::Function(Rc::new(FunctionStmt {
-            name,
-            params,
-            body,
-        }))))
+        Ok(Rc::new(FunctionStmt { name, params, body }))
     }
 
     // varDecl → "var" IDENTIFIER ( "=" expression )? ";" ;
@@ -879,8 +898,8 @@ mod tests {
         let stmts = parse(source)?;
 
         assert_eq!(
-            stmts[0],
-            Box::new(ast::Stmt::Function(Rc::new(ast::FunctionStmt {
+            stmts,
+            vec![Box::new(ast::Stmt::Function(Rc::new(ast::FunctionStmt {
                 name: "add".to_string(),
                 params: vec!["a".to_string(), "b".to_string(),],
                 body: vec![Box::new(ast::Stmt::Print(Box::new(ast::Expr::binary(
@@ -888,7 +907,53 @@ mod tests {
                     Operator::Plus,
                     Box::new(ast::Expr::variable("b".to_string()))
                 ))))],
-            })))
+            })))]
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn class_definition() -> anyhow::Result<(), Vec<error::ParseError>> {
+        let source = r#"class Breakfast {
+            cook() {
+              print "Eggs a-fryin'!";
+            }
+          
+            serve(who) {
+              print "Enjoy your breakfast, " + who + ".";
+            }
+          }"#;
+        let stmts = parse(source)?;
+        assert_eq!(
+            stmts,
+            vec![Box::new(ast::Stmt::Class(ClassStmt {
+                name: "Breakfast".to_string(),
+                methods: vec![
+                    Rc::new(ast::FunctionStmt {
+                        name: "cook".to_string(),
+                        params: vec![],
+                        body: vec![Box::new(ast::Stmt::Print(Box::new(
+                            ast::Expr::literal_string("Eggs a-fryin'!".to_string())
+                        )))]
+                    }),
+                    Rc::new(ast::FunctionStmt {
+                        name: "serve".to_string(),
+                        params: vec!["who".to_string()],
+                        body: vec![Box::new(ast::Stmt::Print(Box::new(ast::Expr::binary(
+                            Box::new(ast::Expr::binary(
+                                Box::new(ast::Expr::literal_string(
+                                    "Enjoy your breakfast, ".to_string()
+                                )),
+                                Operator::Plus,
+                                Box::new(ast::Expr::variable("who".to_string())),
+                            )),
+                            Operator::Plus,
+                            Box::new(ast::Expr::literal_string(".".to_string()))
+                        ))))]
+                    }),
+                ],
+            }))]
         );
 
         Ok(())
