@@ -1,5 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
+use by_address::ByAddress;
+
 use crate::{
     ast, env,
     error::RuntimeError,
@@ -10,6 +12,7 @@ use crate::{
 pub struct Function {
     decl: Rc<ast::FunctionStmt>,
     closure: Rc<RefCell<env::Env>>,
+    initializer: bool,
 }
 
 impl Function {
@@ -17,7 +20,27 @@ impl Function {
         Function {
             decl: decl.clone(),
             closure,
+            initializer: false,
         }
+    }
+
+    pub fn initializer(decl: &Rc<ast::FunctionStmt>, closure: Rc<RefCell<env::Env>>) -> Function {
+        Function {
+            decl: decl.clone(),
+            closure,
+            initializer: true,
+        }
+    }
+
+    pub fn bind(&self, this: eval::Value) -> eval::Value {
+        let env = Rc::new(RefCell::new(env::Env::with_parent(self.closure.clone())));
+        env.borrow_mut().define("this".to_string(), this);
+        let function = if self.initializer {
+            Function::initializer(&self.decl, env)
+        } else {
+            Function::new(&self.decl, env)
+        };
+        eval::Value::Callable(ByAddress(Rc::new(function)))
     }
 }
 
@@ -39,11 +62,23 @@ impl eval::Callable for Function {
 
         let result = interpreter.execute_block(&self.decl.body, env);
         let value = match result {
-            Err(RuntimeError::Return(v)) => v,
+            Err(RuntimeError::Return(v)) => {
+                if self.initializer {
+                    self.closure.borrow().get(&"this".to_string())?
+                } else {
+                    v
+                }
+            }
             Err(e) => {
                 return Err(e);
             }
-            _ => Value::Nil,
+            _ => {
+                if self.initializer {
+                    self.closure.borrow().get(&"this".to_string())?
+                } else {
+                    Value::Nil
+                }
+            }
         };
         Ok(value)
     }

@@ -12,6 +12,7 @@ pub enum Expr {
     Call(CallExpr),
     Get(GetExpr),
     Set(SetExpr),
+    This(ThisExpr),
 }
 
 impl Expr {
@@ -115,6 +116,12 @@ impl Expr {
             value,
         })
     }
+
+    pub fn this() -> Expr {
+        Expr::This(ThisExpr {
+            id: generate_expr_id(),
+        })
+    }
 }
 
 #[derive(PartialEq, Debug)]
@@ -208,6 +215,11 @@ pub struct SetExpr {
 }
 
 #[derive(Debug)]
+pub struct ThisExpr {
+    id: u64,
+}
+
+#[derive(Debug)]
 pub struct GetExpr {
     id: u64,
     pub object: Box<Expr>,
@@ -285,25 +297,30 @@ impl std::fmt::Display for Operator {
 }
 
 macro_rules! partial_eq_expr_field_eq {
+    ($self:ident, $other:ident, ) => {
+        true
+    };
+
     ($self:ident, $other:ident, $field:ident) => {
         $self.$field == $other.$field
     };
 
-    ($self:ident, $other:ident, $field:ident, $($fields:ident),+) => {
+    ($self:ident, $other:ident, $field:ident, $($fields:ident),*) => {
         partial_eq_expr_field_eq!($self, $other, $field) &&
-        partial_eq_expr_field_eq!($self, $other, $($fields),+)
+        partial_eq_expr_field_eq!($self, $other, $($fields),*)
     };
 }
 
 macro_rules! expr_impl {
-    ($expr:ident, $($fields:ident),+) => {
+    ($expr:ident, $($fields:ident),*) => {
         impl $expr {
             pub fn id(self: &$expr) -> u64 { self.id }
         }
 
         impl PartialEq for $expr {
+            #[allow(unused_variables)]
             fn eq(self: &$expr, other: &Self) -> bool {
-                partial_eq_expr_field_eq!(self, other, $($fields),+)
+                partial_eq_expr_field_eq!(self, other, $($fields),*)
             }
         }
 
@@ -319,8 +336,9 @@ expr_impl!(VariableExpr, name);
 expr_impl!(AssignExpr, name, value);
 expr_impl!(LogicalExpr, left, operator, right);
 expr_impl!(CallExpr, callee, args);
-expr_impl!(SetExpr, object, name, value);
 expr_impl!(GetExpr, object, name);
+expr_impl!(SetExpr, object, name, value);
+expr_impl!(ThisExpr,);
 
 lazy_static::lazy_static! {
     static ref NEXT_EXPR_ID: std::sync::Mutex<u64> = Mutex::new(0);

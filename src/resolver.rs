@@ -15,12 +15,20 @@ enum VariableState {
 enum FunctionType {
     None,
     Function,
+    Initializer,
     Method,
+}
+
+#[derive(PartialEq, Clone, Copy)]
+enum ClassType {
+    None,
+    Class,
 }
 
 pub struct Resolver<'a> {
     scopes: Vec<HashMap<String, VariableState>>,
     current_function: FunctionType,
+    current_class: ClassType,
     interpreter: &'a mut Interpreter,
 }
 
@@ -31,6 +39,7 @@ impl<'a> Resolver<'a> {
         Resolver {
             scopes: vec![],
             current_function: FunctionType::None,
+            current_class: ClassType::None,
             interpreter,
         }
     }
@@ -155,7 +164,14 @@ impl visitor::Visitor<Result, Result> for Resolver<'_> {
     }
 
     fn visit_get(&mut self, g: &ast::GetExpr) -> Result {
-        self.resolve_expr(&g.object)?;
+        self.resolve_expr(&g.object)
+    }
+
+    fn visit_this(&mut self, t: &ast::ThisExpr) -> Result {
+        if self.current_class != ClassType::Class {
+            return Err(anyhow!("Can't use 'this' outside of a class."));
+        }
+        self.resolve_local(&"this".to_string(), t.id());
         Ok(())
     }
 
@@ -174,10 +190,13 @@ impl visitor::Visitor<Result, Result> for Resolver<'_> {
     }
 
     fn visit_return_stmt(&mut self, r: &Option<Box<ast::Expr>>) -> Result {
-        if self.current_function != FunctionType::Function {
+        if self.current_function == FunctionType::None {
             return Err(anyhow!("Can't return from top-level code."));
         }
         if let Some(e) = r {
+            if self.current_function == FunctionType::Initializer {
+                return Err(anyhow!("Can't return a value from an initializer."));
+            }
             self.visit_expr(e)?;
         }
         Ok(())
@@ -210,18 +229,35 @@ impl visitor::Visitor<Result, Result> for Resolver<'_> {
         self.declare(f.name.clone());
         self.define(f.name.clone());
 
-        self.resolve_function(f, FunctionType::Function)?;
+        let fun_type = if f.name == "init" {
+            FunctionType::Initializer
+        } else {
+            FunctionType::Function
+        };
+        self.resolve_function(f, fun_type)?;
         Ok(())
     }
 
     fn visit_class_stmt(&mut self, c: &ast::ClassStmt) -> Result {
+        let enclosing_class = self.current_class;
+        self.current_class = ClassType::Class;
+
         self.declare(c.name.clone());
         self.define(c.name.clone());
+
+        self.begin_scope();
+        self.scopes
+            .last_mut()
+            .unwrap()
+            .insert("this".to_string(), VariableState::Defined);
 
         for method in &c.methods {
             self.resolve_function(&method, FunctionType::Method)?;
         }
 
+        self.end_scope();
+
+        self.current_class = enclosing_class;
         Ok(())
     }
 }

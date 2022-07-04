@@ -20,6 +20,7 @@ pub trait Visitor<ExprResult, StmtResult> {
             Call(c) => self.visit_call(c),
             Set(s) => self.visit_set(s),
             Get(g) => self.visit_get(g),
+            This(t) => self.visit_this(t),
         }
     }
     fn visit_binary_expr(&mut self, e: &BinaryExpr) -> ExprResult;
@@ -31,6 +32,7 @@ pub trait Visitor<ExprResult, StmtResult> {
     fn visit_call(&mut self, c: &CallExpr) -> ExprResult;
     fn visit_set(&mut self, s: &SetExpr) -> ExprResult;
     fn visit_get(&mut self, g: &GetExpr) -> ExprResult;
+    fn visit_this(&mut self, t: &ThisExpr) -> ExprResult;
 
     fn visit_stmt(&mut self, s: &Stmt) -> StmtResult {
         use Stmt::*;
@@ -135,6 +137,10 @@ impl Visitor<String, String> for AstPrinter {
             &g.name,
             self.visit_expr(&g.object)
         )
+    }
+
+    fn visit_this(&mut self, _t: &ThisExpr) -> String {
+        "this".to_string()
     }
 
     fn visit_block(&mut self, stmts: &Vec<Box<Stmt>>) -> String {

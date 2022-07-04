@@ -40,7 +40,7 @@ impl ClassCallable {
     }
 }
 
-type MethodMap = HashMap<String, by_address::ByAddress<Rc<dyn Callable>>>;
+type MethodMap = HashMap<String, by_address::ByAddress<Rc<function::Function>>>;
 #[derive(Debug, PartialEq)]
 pub struct Class {
     name: String,
@@ -67,7 +67,7 @@ impl Instance {
         }
     }
 
-    fn get(&self, name: &str) -> ExprResult {
+    fn get(&self, name: &str, this: Value) -> ExprResult {
         if let Some(value) = self.fields.get(name) {
             return Ok(value.clone());
         }
@@ -75,7 +75,7 @@ impl Instance {
         let class = (*self.class).borrow();
 
         if let Some(method) = class.methods.get(name) {
-            return Ok(Value::Callable(method.clone()));
+            return Ok(method.bind(this));
         }
 
         Err(error::RuntimeError::Message(format!(
@@ -93,16 +93,24 @@ impl Instance {
 impl Callable for ClassCallable {
     fn call(
         &self,
-        _interpreter: &mut Interpreter,
-        _args: Vec<Value>,
+        interpreter: &mut Interpreter,
+        args: Vec<Value>,
     ) -> anyhow::Result<Value, RuntimeError> {
-        Ok(Value::Instance(Rc::new(RefCell::new(Instance::new(
-            self.class.clone(),
-        )))))
+        let instance = Value::Instance(Rc::new(RefCell::new(Instance::new(self.class.clone()))));
+
+        if let Some(initializer) = self.class.methods.get("init") {
+            initializer.bind(instance.clone());
+            initializer.call(interpreter, args)?;
+        }
+
+        Ok(instance)
     }
 
     fn arity(&self) -> usize {
-        0
+        match self.class.methods.get("init") {
+            Some(initializer) => initializer.arity(),
+            None => 0,
+        }
     }
 }
 
@@ -330,13 +338,17 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
 
     fn visit_get(&mut self, g: &ast::GetExpr) -> ExprResult {
         let object = self.visit_expr(&g.object)?;
-        if let Value::Instance(instance) = object {
-            return RefCell::borrow(&*instance).get(&g.name);
+        if let Value::Instance(instance) = object.clone() {
+            return RefCell::borrow(&*instance).get(&g.name, object);
         }
 
         Err(error::RuntimeError::Message(
             "Only instances have properties.".to_string(),
         ))
+    }
+
+    fn visit_this(&mut self, t: &ast::ThisExpr) -> ExprResult {
+        self.lookup_variable(&"this".to_string(), t.id())
     }
 
     fn visit_binary_expr(&mut self, e: &ast::BinaryExpr) -> ExprResult {
@@ -483,9 +495,12 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
         let mut methods = HashMap::new();
 
         for method in &c.methods {
-            //methods: HashMap<String, by_address::ByAddress<Rc<dyn Callable>>>,
-            let function = function::Function::new(&method, self.env.clone());
-            let fn_rc: Rc<dyn Callable> = Rc::new(function);
+            let function = if method.name == "init" {
+                function::Function::initializer(&method, self.env.clone())
+            } else {
+                function::Function::new(&method, self.env.clone())
+            };
+            let fn_rc = Rc::new(function);
 
             methods.insert(method.name.clone(), by_address::ByAddress(fn_rc));
         }

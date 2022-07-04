@@ -458,6 +458,7 @@ impl<'a> Parser<'a> {
     // primary  → "true" | "false" | "nil"
     //          | NUMBER | STRING
     //          | "(" expression ")"
+    //          | "this"
     //          | IDENTIFIER ;
     fn primary(&self) -> ExprResult {
         if self.matches(&[TokenType::True])? {
@@ -483,6 +484,9 @@ impl<'a> Parser<'a> {
             let expr = self.expression()?;
             self.consume(TokenType::RightParen, "Expect ')' after expression.")?;
             return Ok(Box::new(ast::Expr::grouping(expr)));
+        }
+        if self.matches(&[TokenType::This])? {
+            return Ok(Box::new(ast::Expr::this()));
         }
         if self.matches(&[TokenType::Identifier])? {
             let token = self.previous().unwrap();
