@@ -10,6 +10,8 @@ pub enum Expr {
     Assign(AssignExpr),
     Logical(LogicalExpr),
     Call(CallExpr),
+    Get(GetExpr),
+    Set(SetExpr),
 }
 
 impl Expr {
@@ -96,6 +98,23 @@ impl Expr {
             args,
         })
     }
+
+    pub fn get(object: Box<Expr>, name: String) -> Expr {
+        Expr::Get(GetExpr {
+            id: generate_expr_id(),
+            object,
+            name,
+        })
+    }
+
+    pub fn set(object: Box<Expr>, name: String, value: Box<Expr>) -> Expr {
+        Expr::Set(SetExpr {
+            id: generate_expr_id(),
+            object,
+            name,
+            value,
+        })
+    }
 }
 
 #[derive(PartialEq, Debug)]
@@ -178,6 +197,21 @@ pub struct CallExpr {
     pub callee: Box<Expr>,
     pub args: Vec<Box<Expr>>,
     // TODO: Track source location for error reporting
+}
+
+#[derive(Debug)]
+pub struct SetExpr {
+    id: u64,
+    pub object: Box<Expr>,
+    pub name: String,
+    pub value: Box<Expr>,
+}
+
+#[derive(Debug)]
+pub struct GetExpr {
+    id: u64,
+    pub object: Box<Expr>,
+    pub name: String,
 }
 
 #[derive(PartialEq, Debug)]
@@ -285,6 +319,8 @@ expr_impl!(VariableExpr, name);
 expr_impl!(AssignExpr, name, value);
 expr_impl!(LogicalExpr, left, operator, right);
 expr_impl!(CallExpr, callee, args);
+expr_impl!(SetExpr, object, name, value);
+expr_impl!(GetExpr, object, name);
 
 lazy_static::lazy_static! {
     static ref NEXT_EXPR_ID: std::sync::Mutex<u64> = Mutex::new(0);

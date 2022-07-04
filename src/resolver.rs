@@ -147,6 +147,17 @@ impl visitor::Visitor<Result, Result> for Resolver<'_> {
         Ok(())
     }
 
+    fn visit_set(&mut self, s: &ast::SetExpr) -> Result {
+        self.resolve_expr(&s.value)?;
+        self.resolve_expr(&s.object)?;
+        Ok(())
+    }
+
+    fn visit_get(&mut self, g: &ast::GetExpr) -> Result {
+        self.resolve_expr(&g.object)?;
+        Ok(())
+    }
+
     fn visit_block(&mut self, v: &Vec<Box<ast::Stmt>>) -> Result {
         self.begin_scope();
 
@@ -199,6 +210,12 @@ impl visitor::Visitor<Result, Result> for Resolver<'_> {
         self.define(f.name.clone());
 
         self.resolve_function(f, FunctionType::Function)?;
+        Ok(())
+    }
+
+    fn visit_class_stmt(&mut self, c: &ast::ClassStmt) -> Result {
+        self.declare(c.name.clone());
+        self.define(c.name.clone());
         Ok(())
     }
 }

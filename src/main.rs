@@ -23,7 +23,9 @@ fn run(source: &str, interpreter: &mut Interpreter) -> anyhow::Result<(), anyhow
     };
     let mut resolver = resolver::Resolver::new(interpreter);
     resolver.resolve(&stmts)?;
-    interpreter.interpret(&stmts)?;
+    interpreter
+        .interpret(&stmts)
+        .map_err(|e| anyhow!(e.to_string()))?;
     if interpreter.has_error() {
         for e in interpreter.errors() {
             println!("{}", e);

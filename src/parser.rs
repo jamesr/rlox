@@ -300,7 +300,7 @@ impl<'a> Parser<'a> {
         self.assignment()
     }
 
-    // assignment → IDENTIFIER "=" assignment
+    // assignment → ( call "." )? IDENTIFIER "=" assignment
     //              | logic_or ;
     fn assignment(&self) -> ExprResult {
         let expr = self.logic_or()?;
@@ -308,8 +308,14 @@ impl<'a> Parser<'a> {
         if self.matches(&[TokenType::Equal])? {
             let value = self.assignment()?;
 
-            if let ast::Expr::Variable(v) = *expr {
-                return Ok(Box::new(ast::Expr::assign(v.name, value)));
+            match *expr {
+                ast::Expr::Variable(v) => {
+                    return Ok(Box::new(ast::Expr::assign(v.name, value)));
+                }
+                ast::Expr::Get(g) => {
+                    return Ok(Box::new(ast::Expr::set(g.object, g.name, value)));
+                }
+                _ => {}
             }
         }
 
@@ -408,13 +414,18 @@ impl<'a> Parser<'a> {
         self.call()
     }
 
-    // call → primary ( "(" arguments? ")" )* ;
+    // call → primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
     fn call(&self) -> ExprResult {
         let mut expr = self.primary()?;
 
         loop {
             if self.matches(&[TokenType::LeftParen])? {
                 expr = self.finish_call(expr)?;
+            }
+            if self.matches(&[TokenType::Dot])? {
+                self.consume(TokenType::Identifier, "Expect property name after '.'.")?;
+                let name = self.previous().unwrap().lexeme.to_string();
+                expr = Box::new(ast::Expr::get(expr, name));
             } else {
                 break;
             }

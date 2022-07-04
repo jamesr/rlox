@@ -18,6 +18,8 @@ pub trait Visitor<ExprResult, StmtResult> {
             Assign(a) => self.visit_assign(a),
             Logical(a) => self.visit_logical(a),
             Call(c) => self.visit_call(c),
+            Set(s) => self.visit_set(s),
+            Get(g) => self.visit_get(g),
         }
     }
     fn visit_binary_expr(&mut self, e: &BinaryExpr) -> ExprResult;
@@ -27,6 +29,8 @@ pub trait Visitor<ExprResult, StmtResult> {
     fn visit_assign(&mut self, a: &AssignExpr) -> ExprResult;
     fn visit_logical(&mut self, l: &LogicalExpr) -> ExprResult;
     fn visit_call(&mut self, c: &CallExpr) -> ExprResult;
+    fn visit_set(&mut self, s: &SetExpr) -> ExprResult;
+    fn visit_get(&mut self, g: &GetExpr) -> ExprResult;
 
     fn visit_stmt(&mut self, s: &Stmt) -> StmtResult {
         use Stmt::*;
@@ -42,7 +46,7 @@ pub trait Visitor<ExprResult, StmtResult> {
             If(i) => self.visit_if_stmt(i),
             While(i) => self.visit_while_stmt(i),
             Function(f) => self.visit_function_stmt(f),
-            Class(c) => panic!("class"),
+            Class(c) => self.visit_class_stmt(c),
         }
     }
 
@@ -53,6 +57,7 @@ pub trait Visitor<ExprResult, StmtResult> {
     fn visit_if_stmt(&mut self, i: &IfStmt) -> StmtResult;
     fn visit_while_stmt(&mut self, w: &WhileStmt) -> StmtResult;
     fn visit_function_stmt(&mut self, f: &Rc<FunctionStmt>) -> StmtResult;
+    fn visit_class_stmt(&mut self, c: &ClassStmt) -> StmtResult;
 }
 
 pub struct AstPrinter;
@@ -115,6 +120,23 @@ impl Visitor<String, String> for AstPrinter {
         )
     }
 
+    fn visit_set(&mut self, s: &SetExpr) -> String {
+        format!(
+            "set ( {} ) . ( {} ) to ( {} )",
+            self.visit_expr(&s.object),
+            &s.name,
+            self.visit_expr(&s.value),
+        )
+    }
+
+    fn visit_get(&mut self, g: &GetExpr) -> String {
+        format!(
+            "get ( {} ) from ( {} )",
+            &g.name,
+            self.visit_expr(&g.object)
+        )
+    }
+
     fn visit_block(&mut self, stmts: &Vec<Box<Stmt>>) -> String {
         stmts.iter().fold("block {\n".to_string(), |acc, stmt| {
             acc + &self.visit_stmt(stmt) + "\n"
@@ -164,6 +186,19 @@ impl Visitor<String, String> for AstPrinter {
     }
     fn visit_function_stmt(&mut self, _f: &Rc<FunctionStmt>) -> String {
         format!("function ( <params> ) {{ <body> }} ").to_string()
+    }
+    fn visit_class_stmt(&mut self, c: &ClassStmt) -> String {
+        format!(
+            "class ( {} ) {{
+                {}
+            }}",
+            c.name,
+            c.methods
+                .iter()
+                .map(|method| self.visit_function_stmt(method))
+                .collect::<Vec<_>>()
+                .join("\n")
+        )
     }
 }
 

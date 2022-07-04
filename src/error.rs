@@ -122,12 +122,6 @@ impl std::fmt::Display for RuntimeError {
     }
 }
 
-impl From<RuntimeError> for anyhow::Error {
-    fn from(e: RuntimeError) -> Self {
-        anyhow!(e)
-    }
-}
-
 #[derive(Debug)]
 pub enum Error {
     Parse(ParseError),
@@ -164,5 +158,16 @@ impl std::fmt::Display for Error {
             Error::Parse(p) => write!(f, "{}", p.to_string()),
             Error::Runtime(r) => write!(f, "{}", r),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{error, eval};
+
+    #[test]
+    fn make_runtime_error() {
+        let _msg_err = error::RuntimeError::Message("hi".to_string());
+        let _return_err = error::RuntimeError::Return(eval::Value::Nil);
     }
 }

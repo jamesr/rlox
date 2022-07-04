@@ -23,7 +23,77 @@ pub enum Value {
     Number(f64),
     Bool(bool),
     Callable(by_address::ByAddress<Rc<dyn Callable>>),
+    Instance(Rc<RefCell<Instance>>),
     Nil,
+}
+
+#[derive(Debug)]
+struct ClassCallable {
+    class: Rc<Class>,
+}
+
+impl ClassCallable {
+    fn new(class: Rc<Class>) -> Self {
+        ClassCallable { class }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Class {
+    name: String,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Instance {
+    class: Rc<Class>,
+    fields: HashMap<String, Value>,
+}
+
+impl Instance {
+    fn new(class: Rc<Class>) -> Self {
+        Instance {
+            class,
+            fields: HashMap::new(),
+        }
+    }
+
+    fn get(&self, name: &str) -> ExprResult {
+        if let Some(value) = self.fields.get(name) {
+            return Ok(value.clone());
+        }
+
+        Err(error::RuntimeError::Message(format!(
+            "Undefined property '{}'.",
+            name
+        )))
+    }
+
+    fn set(&mut self, name: String, value: Value) -> ExprResult {
+        self.fields.insert(name, value.clone());
+        Ok(value)
+    }
+}
+
+impl Class {
+    fn new(name: String) -> Self {
+        Class { name }
+    }
+}
+
+impl Callable for ClassCallable {
+    fn call(
+        &self,
+        _interpreter: &mut Interpreter,
+        _args: Vec<Value>,
+    ) -> anyhow::Result<Value, RuntimeError> {
+        Ok(Value::Instance(Rc::new(RefCell::new(Instance::new(
+            self.class.clone(),
+        )))))
+    }
+
+    fn arity(&self) -> usize {
+        0
+    }
 }
 
 impl Display for Value {
@@ -33,6 +103,7 @@ impl Display for Value {
             Value::Number(n) => write!(f, "{}", n),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Callable(_) => write!(f, "<fn>"),
+            Value::Instance(i) => write!(f, "<instance of {}>", &i.borrow().class.name),
             Value::Nil => write!(f, "nil"),
         }
     }
@@ -207,6 +278,7 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
             ast::LiteralValue::Nil => Value::Nil,
         })
     }
+
     fn visit_call(&mut self, c: &ast::CallExpr) -> ExprResult {
         let callee = self.visit_expr(&c.callee)?;
 
@@ -229,6 +301,30 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
                 "Can only call functions.".to_string(),
             ));
         }
+    }
+
+    fn visit_set(&mut self, s: &ast::SetExpr) -> ExprResult {
+        let object = self.visit_expr(&s.object)?;
+        if let Value::Instance(instance) = object {
+            let value = self.visit_expr(&s.value)?;
+
+            return instance.borrow_mut().set(s.name.clone(), value);
+        }
+
+        Err(error::RuntimeError::Message(
+            "Only instances have fields.".to_string(),
+        ))
+    }
+
+    fn visit_get(&mut self, g: &ast::GetExpr) -> ExprResult {
+        let object = self.visit_expr(&g.object)?;
+        if let Value::Instance(instance) = object {
+            return instance.borrow().get(&g.name);
+        }
+
+        Err(error::RuntimeError::Message(
+            "Only instances have properties.".to_string(),
+        ))
     }
 
     fn visit_binary_expr(&mut self, e: &ast::BinaryExpr) -> ExprResult {
@@ -368,6 +464,17 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
 
         Ok(())
     }
+
+    fn visit_class_stmt(&mut self, c: &ast::ClassStmt) -> StmtResult {
+        self.env_mut().define(c.name.clone(), Value::Nil);
+        let class = Rc::new(Class::new(c.name.clone()));
+        let class_callable: by_address::ByAddress<Rc<dyn Callable>> =
+            by_address::ByAddress(Rc::new(ClassCallable::new(class)));
+        self.env_mut()
+            .assign(c.name.clone(), Value::Callable(class_callable))?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -385,7 +492,12 @@ mod tests {
                 let expr = parse_expression($source)?;
                 let mut resolver = resolver::Resolver::new(&mut interpreter);
                 resolver.resolve_expr(&expr)?;
-                assert_eq!(interpreter.interpret_expr(&expr)?, $expected_value);
+                assert_eq!(
+                    interpreter
+                        .interpret_expr(&expr)
+                        .map_err(|e| anyhow::anyhow!(e.to_string()))?,
+                    $expected_value
+                );
                 Ok(())
             }
         };
@@ -432,10 +544,14 @@ mod tests {
                 }
                 let mut resolver = resolver::Resolver::new(&mut interpreter);
                 resolver.resolve(&stmts)?;
-                interpreter.interpret(&stmts)?;
+                interpreter
+                    .interpret(&stmts)
+                    .map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
                 let all_tests_passed_expr = crate::parser::parse_expression("all_tests_passed")?;
-                let result = interpreter.interpret_expr(&all_tests_passed_expr)?;
+                let result = interpreter
+                    .interpret_expr(&all_tests_passed_expr)
+                    .map_err(|e| anyhow::anyhow!(e.to_string()))?;
                 assert_eq!(result, Value::Bool(true));
                 Ok(())
             }
