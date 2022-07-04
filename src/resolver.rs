@@ -23,6 +23,7 @@ enum FunctionType {
 enum ClassType {
     None,
     Class,
+    Subclass,
 }
 
 pub struct Resolver<'a> {
@@ -167,6 +168,17 @@ impl visitor::Visitor<Result, Result> for Resolver<'_> {
         self.resolve_expr(&g.object)
     }
 
+    fn visit_super(&mut self, s: &ast::SuperExpr) -> Result {
+        if self.current_class == ClassType::None {
+            return Err(anyhow!("Can't use 'super' outside of a class."));
+        }
+        if self.current_class != ClassType::Subclass {
+            return Err(anyhow!("Can't use 'super' in a class with no subclass."));
+        }
+        self.resolve_local(&"super".to_string(), s.id());
+        Ok(())
+    }
+
     fn visit_this(&mut self, t: &ast::ThisExpr) -> Result {
         if self.current_class != ClassType::Class {
             return Err(anyhow!("Can't use 'this' outside of a class."));
@@ -245,6 +257,23 @@ impl visitor::Visitor<Result, Result> for Resolver<'_> {
         self.declare(c.name.clone());
         self.define(c.name.clone());
 
+        if let Some(superclass) = &c.superclass {
+            self.current_class = ClassType::Subclass;
+            if let ast::Expr::Variable(v) = &**superclass {
+                if v.name == c.name {
+                    return Err(anyhow!("A class can't inherit from itself."));
+                }
+            }
+            self.resolve_expr(&superclass)?;
+
+            self.begin_scope();
+
+            self.scopes
+                .last_mut()
+                .unwrap()
+                .insert("super".to_string(), VariableState::Defined);
+        }
+
         self.begin_scope();
         self.scopes
             .last_mut()
@@ -256,6 +285,10 @@ impl visitor::Visitor<Result, Result> for Resolver<'_> {
         }
 
         self.end_scope();
+
+        if c.superclass.is_some() {
+            self.end_scope();
+        }
 
         self.current_class = enclosing_class;
         Ok(())

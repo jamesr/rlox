@@ -1,9 +1,9 @@
-use std::{
-    borrow::Borrow, cell::RefCell, collections::HashMap, fmt::Display, rc::Rc, time::Instant,
-};
+use std::{cell::RefCell, collections::HashMap, fmt::Display, rc::Rc, time::Instant};
+
+use by_address::ByAddress;
 
 use crate::{
-    ast, env,
+    ast, class, env,
     error::{self, RuntimeError},
     function,
     visitor::Visitor,
@@ -25,93 +25,9 @@ pub enum Value {
     Number(f64),
     Bool(bool),
     Callable(by_address::ByAddress<Rc<dyn Callable>>),
-    Instance(Rc<RefCell<Instance>>),
+    Class(by_address::ByAddress<Rc<class::Callable>>),
+    Instance(Rc<RefCell<class::Instance>>),
     Nil,
-}
-
-#[derive(Debug)]
-struct ClassCallable {
-    class: Rc<Class>,
-}
-
-impl ClassCallable {
-    fn new(class: Rc<Class>) -> Self {
-        ClassCallable { class }
-    }
-}
-
-type MethodMap = HashMap<String, by_address::ByAddress<Rc<function::Function>>>;
-#[derive(Debug, PartialEq)]
-pub struct Class {
-    name: String,
-    methods: MethodMap,
-}
-
-impl Class {
-    fn new(name: String, methods: MethodMap) -> Self {
-        Class { name, methods }
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub struct Instance {
-    class: Rc<Class>,
-    fields: HashMap<String, Value>,
-}
-
-impl Instance {
-    fn new(class: Rc<Class>) -> Self {
-        Instance {
-            class,
-            fields: HashMap::new(),
-        }
-    }
-
-    fn get(&self, name: &str, this: Value) -> ExprResult {
-        if let Some(value) = self.fields.get(name) {
-            return Ok(value.clone());
-        }
-
-        let class = (*self.class).borrow();
-
-        if let Some(method) = class.methods.get(name) {
-            return Ok(method.bind(this));
-        }
-
-        Err(error::RuntimeError::Message(format!(
-            "Undefined property '{}'.",
-            name
-        )))
-    }
-
-    fn set(&mut self, name: String, value: Value) -> ExprResult {
-        self.fields.insert(name, value.clone());
-        Ok(value)
-    }
-}
-
-impl Callable for ClassCallable {
-    fn call(
-        &self,
-        interpreter: &mut Interpreter,
-        args: Vec<Value>,
-    ) -> anyhow::Result<Value, RuntimeError> {
-        let instance = Value::Instance(Rc::new(RefCell::new(Instance::new(self.class.clone()))));
-
-        if let Some(initializer) = self.class.methods.get("init") {
-            initializer.bind(instance.clone());
-            initializer.call(interpreter, args)?;
-        }
-
-        Ok(instance)
-    }
-
-    fn arity(&self) -> usize {
-        match self.class.methods.get("init") {
-            Some(initializer) => initializer.arity(),
-            None => 0,
-        }
-    }
 }
 
 impl Display for Value {
@@ -121,6 +37,7 @@ impl Display for Value {
             Value::Number(n) => write!(f, "{}", n),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Callable(_) => write!(f, "<fn>"),
+            Value::Class(c) => write!(f, "{}", &c.class.name),
             Value::Instance(i) => {
                 write!(f, "<instance of {}>", &RefCell::borrow(&*i).class.name)
             }
@@ -307,20 +224,26 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
 
         let args = args_result?;
 
-        if let Value::Callable(c) = callee {
-            if args.len() != c.arity() {
-                return Err(error::RuntimeError::new(format!(
-                    "Expected {} arguments but got {}.",
-                    c.arity(),
-                    args.len()
-                )));
+        // Value::Callable and Value::Class can be called in the same way.
+        let callable = match callee {
+            Value::Callable(c) => (*c).clone(),
+            Value::Class(c) => (*c).clone() as Rc<dyn Callable>,
+            _ => {
+                return Err(error::RuntimeError::new(
+                    "Can only call functions.".to_string(),
+                ))
             }
-            return Ok(c.call(self, args)?);
-        } else {
-            return Err(error::RuntimeError::new(
-                "Can only call functions.".to_string(),
-            ));
+        };
+
+        if args.len() != callable.arity() {
+            return Err(error::RuntimeError::new(format!(
+                "Expected {} arguments but got {}.",
+                callable.arity(),
+                args.len()
+            )));
         }
+
+        return Ok(callable.call(self, args)?);
     }
 
     fn visit_set(&mut self, s: &ast::SetExpr) -> ExprResult {
@@ -344,6 +267,43 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
 
         Err(error::RuntimeError::Message(
             "Only instances have properties.".to_string(),
+        ))
+    }
+
+    fn visit_super(&mut self, s: &ast::SuperExpr) -> ExprResult {
+        let distance = match self.locals.get(&s.id()) {
+            Some(d) => *d,
+            None => {
+                return Err(error::RuntimeError::Message(
+                    "'super' not found in locals".to_string(),
+                ));
+            }
+        };
+        let superclass = env::ancestor(&self.env, distance)
+            .unwrap()
+            .borrow()
+            .get(&"super".to_string())?;
+
+        let object = env::ancestor(&self.env, distance - 1)
+            .unwrap()
+            .borrow()
+            .get(&"this".to_string())?;
+
+        if let Value::Class(superclass) = superclass {
+            let method = match superclass.class.find_method(&s.name) {
+                Some(m) => m,
+                None => {
+                    return Err(error::RuntimeError::Message(format!(
+                        "Undefined property '{}'.",
+                        &s.name
+                    )));
+                }
+            };
+            return Ok(method.bind(object));
+        }
+
+        Err(error::RuntimeError::Message(
+            "'super' not a a class.".to_string(),
         ))
     }
 
@@ -490,7 +450,34 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
     }
 
     fn visit_class_stmt(&mut self, c: &ast::ClassStmt) -> StmtResult {
+        let superclass = if let Some(superclass_expr) = &c.superclass {
+            let superclass = self.visit_expr(superclass_expr)?;
+            if let Value::Class(c) = superclass {
+                Some(ByAddress(c.class.clone()))
+            } else {
+                return Err(error::RuntimeError::Message(
+                    "Superclass must be a class.".to_string(),
+                ));
+            }
+        } else {
+            None
+        };
+
         self.env_mut().define(c.name.clone(), Value::Nil);
+
+        let mut previous = None;
+        if let Some(superclass) = superclass.clone() {
+            // push new env
+            previous = Some(self.env.clone());
+            let super_env = Rc::new(RefCell::new(env::Env::with_parent(self.env.clone())));
+            self.env = super_env;
+
+            // define 'super' to superclass
+            let superclass_callable =
+                by_address::ByAddress(Rc::new(class::Callable::new((*superclass).clone())));
+            self.env_mut()
+                .define("super".to_string(), Value::Class(superclass_callable));
+        }
 
         let mut methods = HashMap::new();
 
@@ -505,11 +492,15 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
             methods.insert(method.name.clone(), by_address::ByAddress(fn_rc));
         }
 
-        let class = Rc::new(Class::new(c.name.clone(), methods));
-        let class_callable: by_address::ByAddress<Rc<dyn Callable>> =
-            by_address::ByAddress(Rc::new(ClassCallable::new(class)));
+        let class = Rc::new(class::Class::new(c.name.clone(), methods, superclass));
+        let class_callable = by_address::ByAddress(Rc::new(class::Callable::new(class)));
+
+        if let Some(previous_env) = previous {
+            self.env = previous_env;
+        }
+
         self.env_mut()
-            .assign(c.name.clone(), Value::Callable(class_callable))?;
+            .assign(c.name.clone(), Value::Class(class_callable))?;
 
         Ok(())
     }

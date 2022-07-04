@@ -110,10 +110,20 @@ impl<'a> Parser<'a> {
         }
     }
 
-    //  classDecl → "class" IDENTIFIER "{" function* "}" ;
+    //  classDecl → "class" IDENTIFIER ( "<" IDENTIFIER )? "{" function* "}" ;
     fn class_decl(&self) -> StmtResult {
         self.consume(TokenType::Identifier, "Expect class name.")?;
         let name = self.previous().unwrap().lexeme.to_string();
+
+        let superclass = if self.matches(&[TokenType::Less])? {
+            self.consume(TokenType::Identifier, "Expect superclass name.")?;
+            Some(Box::new(ast::Expr::variable(
+                self.previous().unwrap().lexeme.to_string(),
+            )))
+        } else {
+            None
+        };
+
         self.consume(TokenType::LeftBrace, "Expect '{' before class body.")?;
 
         let mut methods = vec![];
@@ -123,7 +133,11 @@ impl<'a> Parser<'a> {
 
         self.consume(TokenType::RightBrace, "Expect '}' after class body.")?;
 
-        Ok(Box::new(ast::Stmt::Class(ClassStmt { name, methods })))
+        Ok(Box::new(ast::Stmt::Class(ClassStmt {
+            name,
+            superclass,
+            methods,
+        })))
     }
 
     // funDecl → "fun" function ;
@@ -455,11 +469,11 @@ impl<'a> Parser<'a> {
         Ok(Box::new(ast::Expr::call(callee, args)))
     }
 
-    // primary  → "true" | "false" | "nil"
+    // primary  → "true" | "false" | "nil" | "this"
     //          | NUMBER | STRING
+    //          | IDENTIFIER
     //          | "(" expression ")"
-    //          | "this"
-    //          | IDENTIFIER ;
+    //          | "super" "." IDENTIFIER ;
     fn primary(&self) -> ExprResult {
         if self.matches(&[TokenType::True])? {
             return Ok(Box::new(ast::Expr::literal_bool(true)));
@@ -469,6 +483,9 @@ impl<'a> Parser<'a> {
         }
         if self.matches(&[TokenType::Nil])? {
             return Ok(Box::new(ast::Expr::literal_nil()));
+        }
+        if self.matches(&[TokenType::This])? {
+            return Ok(Box::new(ast::Expr::this()));
         }
         if self.matches(&[TokenType::Number])? {
             if let TokenValue::Number(n) = self.previous().unwrap().value.unwrap() {
@@ -480,17 +497,20 @@ impl<'a> Parser<'a> {
                 return Ok(Box::new(ast::Expr::literal_string(s.to_string())));
             }
         }
+        if self.matches(&[TokenType::Identifier])? {
+            let token = self.previous().unwrap();
+            return Ok(Box::new(ast::Expr::variable(token.lexeme.to_string())));
+        }
         if self.matches(&[TokenType::LeftParen])? {
             let expr = self.expression()?;
             self.consume(TokenType::RightParen, "Expect ')' after expression.")?;
             return Ok(Box::new(ast::Expr::grouping(expr)));
         }
-        if self.matches(&[TokenType::This])? {
-            return Ok(Box::new(ast::Expr::this()));
-        }
-        if self.matches(&[TokenType::Identifier])? {
-            let token = self.previous().unwrap();
-            return Ok(Box::new(ast::Expr::variable(token.lexeme.to_string())));
+        if self.matches(&[TokenType::Super])? {
+            self.consume(TokenType::Dot, "Expect '.' after 'super'.")?;
+            self.consume(TokenType::Identifier, "Expect superclass method name.")?;
+            let method = self.previous().unwrap().lexeme.to_string();
+            return Ok(Box::new(ast::Expr::super_expr(method)));
         }
         Err(self.error("expected expression".to_string()))
     }
@@ -947,6 +967,7 @@ mod tests {
             stmts,
             vec![Box::new(ast::Stmt::Class(ClassStmt {
                 name: "Breakfast".to_string(),
+                superclass: None,
                 methods: vec![
                     Rc::new(ast::FunctionStmt {
                         name: "cook".to_string(),
@@ -971,6 +992,29 @@ mod tests {
                         ))))]
                     }),
                 ],
+            }))]
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn class_with_superclass() -> anyhow::Result<(), Vec<error::ParseError>> {
+        let source = r#"class Breakfast < Meal {
+            cook() {}
+        }"#;
+
+        let stmts = parse(source)?;
+        assert_eq!(
+            stmts,
+            vec![Box::new(ast::Stmt::Class(ClassStmt {
+                name: "Breakfast".to_string(),
+                superclass: Some(Box::new(ast::Expr::variable("Meal".to_string()),)),
+                methods: vec![Rc::new(FunctionStmt {
+                    name: "cook".to_string(),
+                    params: vec![],
+                    body: vec![]
+                })],
             }))]
         );
 

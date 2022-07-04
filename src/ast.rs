@@ -12,6 +12,7 @@ pub enum Expr {
     Call(CallExpr),
     Get(GetExpr),
     Set(SetExpr),
+    Super(SuperExpr),
     This(ThisExpr),
 }
 
@@ -117,6 +118,13 @@ impl Expr {
         })
     }
 
+    pub fn super_expr(name: String) -> Expr {
+        Expr::Super(SuperExpr {
+            id: generate_expr_id(),
+            name,
+        })
+    }
+
     pub fn this() -> Expr {
         Expr::This(ThisExpr {
             id: generate_expr_id(),
@@ -215,6 +223,12 @@ pub struct SetExpr {
 }
 
 #[derive(Debug)]
+pub struct SuperExpr {
+    id: u64,
+    pub name: String,
+}
+
+#[derive(Debug)]
 pub struct ThisExpr {
     id: u64,
 }
@@ -268,6 +282,7 @@ pub struct FunctionStmt {
 #[derive(PartialEq, Debug)]
 pub struct ClassStmt {
     pub name: String,
+    pub superclass: Option<Box<Expr>>,
     pub methods: Vec<Rc<FunctionStmt>>,
 }
 
@@ -339,6 +354,7 @@ expr_impl!(CallExpr, callee, args);
 expr_impl!(GetExpr, object, name);
 expr_impl!(SetExpr, object, name, value);
 expr_impl!(ThisExpr,);
+expr_impl!(SuperExpr, name);
 
 lazy_static::lazy_static! {
     static ref NEXT_EXPR_ID: std::sync::Mutex<u64> = Mutex::new(0);

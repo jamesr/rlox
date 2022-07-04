@@ -20,6 +20,7 @@ pub trait Visitor<ExprResult, StmtResult> {
             Call(c) => self.visit_call(c),
             Set(s) => self.visit_set(s),
             Get(g) => self.visit_get(g),
+            Super(s) => self.visit_super(s),
             This(t) => self.visit_this(t),
         }
     }
@@ -32,6 +33,7 @@ pub trait Visitor<ExprResult, StmtResult> {
     fn visit_call(&mut self, c: &CallExpr) -> ExprResult;
     fn visit_set(&mut self, s: &SetExpr) -> ExprResult;
     fn visit_get(&mut self, g: &GetExpr) -> ExprResult;
+    fn visit_super(&mut self, s: &SuperExpr) -> ExprResult;
     fn visit_this(&mut self, t: &ThisExpr) -> ExprResult;
 
     fn visit_stmt(&mut self, s: &Stmt) -> StmtResult {
@@ -137,6 +139,10 @@ impl Visitor<String, String> for AstPrinter {
             &g.name,
             self.visit_expr(&g.object)
         )
+    }
+
+    fn visit_super(&mut self, s: &SuperExpr) -> String {
+        format!("super . ( {} )", &s.name)
     }
 
     fn visit_this(&mut self, _t: &ThisExpr) -> String {

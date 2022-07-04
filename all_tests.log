@@ -89,7 +89,7 @@ ok
 ok
 
 ../craftinginterpreters/test/comments/only_line_comment.lox actual
-thread 'main' panicked at 'already mutably borrowed: BorrowError', src/parser.rs:195:22
+thread 'main' panicked at 'already mutably borrowed: BorrowError', src/parser.rs:209:22
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 ../craftinginterpreters/test/comments/only_line_comment.lox expected
 
@@ -99,12 +99,12 @@ ok
 ok
 
 ../craftinginterpreters/test/comments/only_line_comment_and_line.lox actual
-thread 'main' panicked at 'already mutably borrowed: BorrowError', src/parser.rs:195:22
+thread 'main' panicked at 'already mutably borrowed: BorrowError', src/parser.rs:209:22
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 ../craftinginterpreters/test/comments/only_line_comment_and_line.lox expected
 
 ../craftinginterpreters/test/empty_file.lox actual
-thread 'main' panicked at 'already mutably borrowed: BorrowError', src/parser.rs:195:22
+thread 'main' panicked at 'already mutably borrowed: BorrowError', src/parser.rs:209:22
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 ../craftinginterpreters/test/empty_file.lox expected
 
@@ -152,10 +152,9 @@ value
 value
 
 ../craftinginterpreters/test/variable/use_this_as_var.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type Identifier Expect variable name.
+Error: expected to find type Identifier Expect variable name.
 line 1 col 4..8
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/variable/use_this_as_var.lox expected
 
 ../craftinginterpreters/test/variable/redeclare_global.lox actual
@@ -164,15 +163,13 @@ nil
 nil
 
 ../craftinginterpreters/test/variable/use_nil_as_var.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type Identifier Expect variable name.
+Error: expected to find type Identifier Expect variable name.
 line 1 col 4..7
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/variable/use_nil_as_var.lox expected
 
 ../craftinginterpreters/test/variable/undefined_global.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: variable notDefined not found', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: variable notDefined not found
 ../craftinginterpreters/test/variable/undefined_global.lox expected
 
 ../craftinginterpreters/test/variable/shadow_and_local.lox actual
@@ -198,10 +195,9 @@ nil
 nil
 
 ../craftinginterpreters/test/variable/use_false_as_var.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type Identifier Expect variable name.
+Error: expected to find type Identifier Expect variable name.
 line 1 col 4..9
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/variable/use_false_as_var.lox expected
 
 ../craftinginterpreters/test/variable/shadow_global.lox actual
@@ -241,8 +237,7 @@ ok
 ../craftinginterpreters/test/variable/collide_with_parameter.lox expected
 
 ../craftinginterpreters/test/variable/use_local_in_initializer.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Can't read local variable from its own initializer.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Can't read local variable from its own initializer.
 ../craftinginterpreters/test/variable/use_local_in_initializer.lox expected
 
 ../craftinginterpreters/test/variable/redefine_global.lox actual
@@ -251,8 +246,7 @@ note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 2
 
 ../craftinginterpreters/test/variable/undefined_local.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: variable notDefined not found', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: variable notDefined not found
 ../craftinginterpreters/test/variable/undefined_local.lox expected
 
 ../craftinginterpreters/test/nil/literal.lox actual
@@ -261,15 +255,14 @@ nil
 nil
 
 ../craftinginterpreters/test/unexpected_character.lox actual
-thread 'main' panicked at 'called `Option::unwrap()` on a `None` value', src/parser.rs:273:32
+thread 'main' panicked at 'called `Option::unwrap()` on a `None` value', src/parser.rs:287:32
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 ../craftinginterpreters/test/unexpected_character.lox expected
 
 ../craftinginterpreters/test/if/var_in_then.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected expression
+Error: expected expression
 line 1 col 10..13
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/if/var_in_then.lox expected
 
 ../craftinginterpreters/test/if/dangling_else.lox actual
@@ -291,17 +284,15 @@ true
 empty
 
 ../craftinginterpreters/test/if/fun_in_else.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected expression
+Error: expected expression
 line 1 col 8..11
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/if/fun_in_else.lox expected
 
 ../craftinginterpreters/test/if/class_in_else.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected expression
+Error: expected expression
 line 1 col 8..13
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/if/class_in_else.lox expected
 
 ../craftinginterpreters/test/if/else.lox actual
@@ -314,24 +305,21 @@ good
 block
 
 ../craftinginterpreters/test/if/fun_in_then.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected expression
+Error: expected expression
 line 1 col 10..13
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/if/fun_in_then.lox expected
 
 ../craftinginterpreters/test/if/class_in_then.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected expression
+Error: expected expression
 line 1 col 10..15
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/if/class_in_then.lox expected
 
 ../craftinginterpreters/test/if/var_in_else.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected expression
+Error: expected expression
 line 1 col 8..11
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/if/var_in_else.lox expected
 
 ../craftinginterpreters/test/if/if.lox actual
@@ -394,7 +382,7 @@ arg
 arg
 
 ../craftinginterpreters/test/assignment/undefined.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Message("Undefined variable 'unknown'.")', src/eval.rs:236:45
+thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Message("Undefined variable 'unknown'.")', src/eval.rs:153:45
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 ../craftinginterpreters/test/assignment/undefined.lox expected
 
@@ -409,8 +397,7 @@ ok
 ok
 
 ../craftinginterpreters/test/return/at_top_level.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Can't return from top-level code.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Can't return from top-level code.
 ../craftinginterpreters/test/return/at_top_level.lox expected
 
 ../craftinginterpreters/test/return/return_nil_if_no_value.lox actual
@@ -434,8 +421,7 @@ ok
 ok
 
 ../craftinginterpreters/test/function/local_mutual_recursion.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: variable isOdd not found', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: variable isOdd not found
 ../craftinginterpreters/test/function/local_mutual_recursion.lox expected
 
 ../craftinginterpreters/test/function/empty_body.lox actual
@@ -444,37 +430,32 @@ nil
 nil
 
 ../craftinginterpreters/test/function/too_many_arguments.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Can't have more than 255 arguments
+Error: Can't have more than 255 arguments
 line 259 col 5..6
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/function/too_many_arguments.lox expected
 
 ../craftinginterpreters/test/function/missing_comma_in_parameters.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type RightParen Expect ')' after parameters.
+Error: expected to find type RightParen Expect ')' after parameters.
 line 2 col 13..14
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/function/missing_comma_in_parameters.lox expected
 
 ../craftinginterpreters/test/function/nested_call_with_arguments.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type Semicolon Expect ';' after return value.
+Error: expected to find type Semicolon Expect ';' after return value.
 line 5 col 24..25
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/function/nested_call_with_arguments.lox expected
 hello world
 
 ../craftinginterpreters/test/function/body_must_be_block.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type LeftBrace Expect '{' before function body.
+Error: expected to find type LeftBrace Expect '{' before function body.
 line 2 col 8..11
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/function/body_must_be_block.lox expected
 
 ../craftinginterpreters/test/function/missing_arguments.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Expected 2 arguments but got 1.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Expected 2 arguments but got 1.
 ../craftinginterpreters/test/function/missing_arguments.lox expected
 
 ../craftinginterpreters/test/function/parameters.lox actual
@@ -516,10 +497,9 @@ note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 <native fn>
 
 ../craftinginterpreters/test/function/too_many_parameters.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Can't have more than 255 parameters.
+Error: Can't have more than 255 parameters.
 line 256 col 10..11
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/function/too_many_parameters.lox expected
 
 ../craftinginterpreters/test/function/mutual_recursion.lox actual
@@ -530,18 +510,15 @@ true
 true
 
 ../craftinginterpreters/test/function/extra_arguments.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Expected 2 arguments but got 4.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Expected 2 arguments but got 4.
 ../craftinginterpreters/test/function/extra_arguments.lox expected
 
 ../craftinginterpreters/test/field/set_on_nil.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Only instances have fields.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Only instances have fields.
 ../craftinginterpreters/test/field/set_on_nil.lox expected
 
 ../craftinginterpreters/test/field/get_on_string.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Only instances have properties.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Only instances have properties.
 ../craftinginterpreters/test/field/get_on_string.lox expected
 
 ../craftinginterpreters/test/field/many.lox actual
@@ -706,13 +683,11 @@ watermelon
 yuzu
 
 ../craftinginterpreters/test/field/set_on_function.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Only instances have fields.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Only instances have fields.
 ../craftinginterpreters/test/field/set_on_function.lox expected
 
 ../craftinginterpreters/test/field/set_on_bool.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Only instances have fields.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Only instances have fields.
 ../craftinginterpreters/test/field/set_on_bool.lox expected
 
 ../craftinginterpreters/test/field/method.lox actual
@@ -723,23 +698,19 @@ got method
 arg
 
 ../craftinginterpreters/test/field/call_nonfunction_field.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Can only call functions.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Can only call functions.
 ../craftinginterpreters/test/field/call_nonfunction_field.lox expected
 
 ../craftinginterpreters/test/field/get_on_nil.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Only instances have properties.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Only instances have properties.
 ../craftinginterpreters/test/field/get_on_nil.lox expected
 
 ../craftinginterpreters/test/field/set_on_class.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Only instances have fields.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Only instances have fields.
 ../craftinginterpreters/test/field/set_on_class.lox expected
 
 ../craftinginterpreters/test/field/set_on_string.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Only instances have fields.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Only instances have fields.
 ../craftinginterpreters/test/field/set_on_string.lox expected
 
 ../craftinginterpreters/test/field/on_instance.lox actual
@@ -754,8 +725,7 @@ bar value
 baz value
 
 ../craftinginterpreters/test/field/get_on_function.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Only instances have properties.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Only instances have properties.
 ../craftinginterpreters/test/field/get_on_function.lox expected
 
 ../craftinginterpreters/test/field/call_function_field.lox actual
@@ -768,8 +738,7 @@ bar
 2
 
 ../craftinginterpreters/test/field/set_evaluation_order.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: variable undefined1 not found', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: variable undefined1 not found
 ../craftinginterpreters/test/field/set_evaluation_order.lox expected
 
 ../craftinginterpreters/test/field/method_binds_this.lox actual
@@ -780,13 +749,11 @@ foo1
 1
 
 ../craftinginterpreters/test/field/set_on_num.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Only instances have fields.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Only instances have fields.
 ../craftinginterpreters/test/field/set_on_num.lox expected
 
 ../craftinginterpreters/test/field/get_on_class.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Only instances have properties.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Only instances have properties.
 ../craftinginterpreters/test/field/get_on_class.lox expected
 
 ../craftinginterpreters/test/field/get_and_set_method.lox actual
@@ -801,32 +768,27 @@ method
 2
 
 ../craftinginterpreters/test/field/get_on_bool.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Only instances have properties.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Only instances have properties.
 ../craftinginterpreters/test/field/get_on_bool.lox expected
 
 ../craftinginterpreters/test/field/get_on_num.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Only instances have properties.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Only instances have properties.
 ../craftinginterpreters/test/field/get_on_num.lox expected
 
 ../craftinginterpreters/test/field/undefined.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Undefined property 'bar'.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Undefined property 'bar'.
 ../craftinginterpreters/test/field/undefined.lox expected
 
 ../craftinginterpreters/test/print/missing_argument.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected expression
+Error: expected expression
 line 1 col 5..6
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/print/missing_argument.lox expected
 
 ../craftinginterpreters/test/number/decimal_point_at_eof.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type Identifier Expect property name after '.'.
+Error: expected to find type Identifier Expect property name after '.'.
 line 1 col 4..4
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/number/decimal_point_at_eof.lox expected
 
 ../craftinginterpreters/test/number/nan_equality.lox actual
@@ -856,42 +818,35 @@ true
 -0.001
 
 ../craftinginterpreters/test/number/leading_dot.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected expression
+Error: expected expression
 line 1 col 0..1
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/number/leading_dot.lox expected
 
 ../craftinginterpreters/test/number/trailing_dot.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type Identifier Expect property name after '.'.
+Error: expected to find type Identifier Expect property name after '.'.
 line 1 col 4..5
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/number/trailing_dot.lox expected
 
 ../craftinginterpreters/test/call/nil.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Can only call functions.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Can only call functions.
 ../craftinginterpreters/test/call/nil.lox expected
 
 ../craftinginterpreters/test/call/bool.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Can only call functions.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Can only call functions.
 ../craftinginterpreters/test/call/bool.lox expected
 
 ../craftinginterpreters/test/call/num.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Can only call functions.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Can only call functions.
 ../craftinginterpreters/test/call/num.lox expected
 
 ../craftinginterpreters/test/call/object.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Can only call functions.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Can only call functions.
 ../craftinginterpreters/test/call/object.lox expected
 
 ../craftinginterpreters/test/call/string.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Can only call functions.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Can only call functions.
 ../craftinginterpreters/test/call/string.lox expected
 
 ../craftinginterpreters/test/logical_operator/and.lox actual
@@ -955,31 +910,21 @@ true
 s
 
 ../craftinginterpreters/test/inheritance/inherit_from_nil.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type LeftBrace Expect '{' before class body.
-line 1 col 10..11
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Superclass must be a class.
 ../craftinginterpreters/test/inheritance/inherit_from_nil.lox expected
 
 ../craftinginterpreters/test/inheritance/inherit_from_function.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type LeftBrace Expect '{' before class body.
-line 2 col 15..16
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Superclass must be a class.
 ../craftinginterpreters/test/inheritance/inherit_from_function.lox expected
 
 ../craftinginterpreters/test/inheritance/parenthesized_superclass.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type LeftBrace Expect '{' before class body.
-line 3 col 10..11
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: expected to find type Identifier Expect superclass name.
+line 3 col 12..13
+
 ../craftinginterpreters/test/inheritance/parenthesized_superclass.lox expected
 
 ../craftinginterpreters/test/inheritance/set_fields_from_base_class.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type LeftBrace Expect '{' before class body.
-line 12 col 10..11
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Can't use 'this' outside of a class.
 ../craftinginterpreters/test/inheritance/set_fields_from_base_class.lox expected
 foo 1
 foo 2
@@ -989,183 +934,130 @@ bar 1
 bar 2
 
 ../craftinginterpreters/test/inheritance/inherit_from_number.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type LeftBrace Expect '{' before class body.
-line 1 col 10..11
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Superclass must be a class.
 ../craftinginterpreters/test/inheritance/inherit_from_number.lox expected
 
 ../craftinginterpreters/test/inheritance/inherit_methods.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type LeftBrace Expect '{' before class body.
-line 5 col 10..11
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+foo
+bar
+bar
 ../craftinginterpreters/test/inheritance/inherit_methods.lox expected
 foo
 bar
 bar
 
 ../craftinginterpreters/test/inheritance/constructor.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type LeftBrace Expect '{' before class body.
-line 10 col 8..9
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Expected 0 arguments but got 1.
 ../craftinginterpreters/test/inheritance/constructor.lox expected
 value
 
 ../craftinginterpreters/test/super/no_superclass_method.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type LeftBrace Expect '{' before class body.
-line 2 col 14..15
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Undefined property 'doesNotExist'.
 ../craftinginterpreters/test/super/no_superclass_method.lox expected
 
 ../craftinginterpreters/test/super/call_same_method.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type LeftBrace Expect '{' before class body.
-line 6 col 14..15
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Derived.foo()
+Base.foo()
 ../craftinginterpreters/test/super/call_same_method.lox expected
 Derived.foo()
 Base.foo()
 
 ../craftinginterpreters/test/super/no_superclass_call.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected expression
-line 2 col 4..9
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Can't use 'super' in a class with no subclass.
 ../craftinginterpreters/test/super/no_superclass_call.lox expected
 
 ../craftinginterpreters/test/super/no_superclass_bind.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected expression
-line 2 col 4..9
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Can't use 'super' in a class with no subclass.
 ../craftinginterpreters/test/super/no_superclass_bind.lox expected
 
 ../craftinginterpreters/test/super/parenthesized.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type LeftBrace Expect '{' before class body.
-line 4 col 8..9
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: expected to find type Dot Expect '.' after 'super'.
+line 7 col 10..11
+
 ../craftinginterpreters/test/super/parenthesized.lox expected
 
 ../craftinginterpreters/test/super/this_in_superclass_method.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type LeftBrace Expect '{' before class body.
-line 6 col 14..15
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Can't use 'this' outside of a class.
 ../craftinginterpreters/test/super/this_in_superclass_method.lox expected
 a
 b
 
 ../craftinginterpreters/test/super/closure.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type LeftBrace Expect '{' before class body.
-line 4 col 14..15
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Base
 ../craftinginterpreters/test/super/closure.lox expected
 Base
 
 ../craftinginterpreters/test/super/super_in_top_level_function.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected expression
-line 0 col 2..7
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Can't use 'super' outside of a class.
 ../craftinginterpreters/test/super/super_in_top_level_function.lox expected
 
 ../craftinginterpreters/test/super/call_other_method.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type LeftBrace Expect '{' before class body.
-line 6 col 14..15
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Derived.bar()
+Base.foo()
 ../craftinginterpreters/test/super/call_other_method.lox expected
 Derived.bar()
 Base.foo()
 
 ../craftinginterpreters/test/super/missing_arguments.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type LeftBrace Expect '{' before class body.
-line 6 col 14..15
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Expected 2 arguments but got 1.
 ../craftinginterpreters/test/super/missing_arguments.lox expected
 
 ../craftinginterpreters/test/super/super_in_closure_in_inherited_method.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type LeftBrace Expect '{' before class body.
-line 6 col 8..9
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: expected to find type Semicolon Expect ';' after value.
+line 25 col 16..17
+
 ../craftinginterpreters/test/super/super_in_closure_in_inherited_method.lox expected
 A
 
 ../craftinginterpreters/test/super/super_in_inherited_method.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type LeftBrace Expect '{' before class body.
-line 6 col 8..9
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+A
 ../craftinginterpreters/test/super/super_in_inherited_method.lox expected
 A
 
 ../craftinginterpreters/test/super/super_without_dot.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type LeftBrace Expect '{' before class body.
-line 2 col 8..9
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: expected to find type Dot Expect '.' after 'super'.
+line 5 col 9..10
+
 ../craftinginterpreters/test/super/super_without_dot.lox expected
 
 ../craftinginterpreters/test/super/indirectly_inherited.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type LeftBrace Expect '{' before class body.
-line 6 col 8..9
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+C.foo()
+A.foo()
 ../craftinginterpreters/test/super/indirectly_inherited.lox expected
 C.foo()
 A.foo()
 
 ../craftinginterpreters/test/super/super_at_top_level.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected expression
-line 0 col 0..5
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Can't use 'super' outside of a class.
 ../craftinginterpreters/test/super/super_at_top_level.lox expected
 
 ../craftinginterpreters/test/super/super_without_name.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type LeftBrace Expect '{' before class body.
-line 2 col 8..9
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: expected to find type Identifier Expect superclass method name.
+line 4 col 10..11
+
 ../craftinginterpreters/test/super/super_without_name.lox expected
 
 ../craftinginterpreters/test/super/extra_arguments.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type LeftBrace Expect '{' before class body.
-line 6 col 14..15
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Derived.foo()
+Error: Expected 2 arguments but got 4.
 ../craftinginterpreters/test/super/extra_arguments.lox expected
 Derived.foo()
 
 ../craftinginterpreters/test/super/bound_method.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type LeftBrace Expect '{' before class body.
-line 6 col 8..9
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+A.method(arg)
 ../craftinginterpreters/test/super/bound_method.lox expected
 A.method(arg)
 
 ../craftinginterpreters/test/super/constructor.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type LeftBrace Expect '{' before class body.
-line 6 col 14..15
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Derived.init()
+Error: variable super not found
 ../craftinginterpreters/test/super/constructor.lox expected
 Derived.init()
 Base.init(a, b)
 
 ../craftinginterpreters/test/super/reassign_superclass.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type LeftBrace Expect '{' before class body.
-line 6 col 14..15
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Base.method()
+Base.method()
 ../craftinginterpreters/test/super/reassign_superclass.lox expected
 Base.method()
 Base.method()
@@ -1219,18 +1111,16 @@ true
 true
 
 ../craftinginterpreters/test/expressions/evaluate.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type Semicolon Expect ';' after value.
+Error: expected to find type Semicolon Expect ';' after value.
 line 4 col 0..0
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/expressions/evaluate.lox expected
 2
 
 ../craftinginterpreters/test/expressions/parse.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type Semicolon Expect ';' after value.
+Error: expected to find type Semicolon Expect ';' after value.
 line 3 col 0..0
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/expressions/parse.lox expected
 (+ (group (- 5.0 (group (- 3.0 1.0)))) (- 1.0))
 
@@ -1240,8 +1130,7 @@ i
 i
 
 ../craftinginterpreters/test/for/scope.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: value String("before") is not a number', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: value String("before") is not a number
 ../craftinginterpreters/test/for/scope.lox expected
 0
 -1
@@ -1249,10 +1138,9 @@ after
 0
 
 ../craftinginterpreters/test/for/var_in_body.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected expression
+Error: expected expression
 line 1 col 9..12
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/for/var_in_body.lox expected
 
 ../craftinginterpreters/test/for/syntax.lox actual
@@ -1292,24 +1180,21 @@ i
 i
 
 ../craftinginterpreters/test/for/statement_initializer.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected expression
+Error: expected expression
 line 2 col 5..6
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/for/statement_initializer.lox expected
 
 ../craftinginterpreters/test/for/statement_increment.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected expression
+Error: expected expression
 line 1 col 23..24
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/for/statement_increment.lox expected
 
 ../craftinginterpreters/test/for/statement_condition.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected expression
+Error: expected expression
 line 2 col 16..17
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/for/statement_condition.lox expected
 
 ../craftinginterpreters/test/for/closure_in_body.lox actual
@@ -1328,63 +1213,51 @@ note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 3
 
 ../craftinginterpreters/test/for/class_in_body.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected expression
+Error: expected expression
 line 1 col 9..14
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/for/class_in_body.lox expected
 
 ../craftinginterpreters/test/for/fun_in_body.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected expression
+Error: expected expression
 line 1 col 9..12
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/for/fun_in_body.lox expected
 
 ../craftinginterpreters/test/class/empty.lox actual
-<fn>
+Foo
 ../craftinginterpreters/test/class/empty.lox expected
 Foo
 
 ../craftinginterpreters/test/class/local_inherit_self.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type LeftBrace Expect '{' before class body.
-line 1 col 12..13
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: A class can't inherit from itself.
 ../craftinginterpreters/test/class/local_inherit_self.lox expected
 
 ../craftinginterpreters/test/class/local_inherit_other.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type LeftBrace Expect '{' before class body.
-line 3 col 10..11
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+B
 ../craftinginterpreters/test/class/local_inherit_other.lox expected
 B
 
 ../craftinginterpreters/test/class/inherited_method.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type LeftBrace Expect '{' before class body.
-line 6 col 10..11
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+in foo
+in bar
+in baz
 ../craftinginterpreters/test/class/inherited_method.lox expected
 in foo
 in bar
 in baz
 
 ../craftinginterpreters/test/class/reference_self.lox actual
-<fn>
+Foo
 ../craftinginterpreters/test/class/reference_self.lox expected
 Foo
 
 ../craftinginterpreters/test/class/inherit_self.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type LeftBrace Expect '{' before class body.
-line 0 col 10..11
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: A class can't inherit from itself.
 ../craftinginterpreters/test/class/inherit_self.lox expected
 
 ../craftinginterpreters/test/class/local_reference_self.lox actual
-<fn>
+Foo
 ../craftinginterpreters/test/class/local_reference_self.lox expected
 Foo
 
@@ -1394,8 +1267,7 @@ baz
 baz
 
 ../craftinginterpreters/test/this/this_at_top_level.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Can't use 'this' outside of a class.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Can't use 'this' outside of a class.
 ../craftinginterpreters/test/this/this_at_top_level.lox expected
 
 ../craftinginterpreters/test/this/closure.lox actual
@@ -1404,15 +1276,13 @@ Foo
 Foo
 
 ../craftinginterpreters/test/this/this_in_top_level_function.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Can't use 'this' outside of a class.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Can't use 'this' outside of a class.
 ../craftinginterpreters/test/this/this_in_top_level_function.lox expected
 
 ../craftinginterpreters/test/this/nested_closure.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type Semicolon Expect ';' after value.
+Error: expected to find type Semicolon Expect ';' after value.
 line 18 col 15..16
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/this/nested_closure.lox expected
 Foo
 
@@ -1426,8 +1296,7 @@ Outer instance
 Inner instance
 
 ../craftinginterpreters/test/string/error_after_multiline.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: variable err not found', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: variable err not found
 ../craftinginterpreters/test/string/error_after_multiline.lox expected
 
 ../craftinginterpreters/test/string/literals.lox actual
@@ -1449,10 +1318,9 @@ A~¶Þॐஃ
 3
 
 ../craftinginterpreters/test/string/unterminated.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Unterminated string.
+Error: Unterminated string.
 line 1 col 0..0
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/string/unterminated.lox expected
 
 ../craftinginterpreters/test/precedence.lox actual
@@ -1490,10 +1358,7 @@ false
 false
 
 ../craftinginterpreters/test/regression/394.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected to find type LeftBrace Expect '{' before class body.
-line 2 col 10..11
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+B
 ../craftinginterpreters/test/regression/394.lox expected
 B
 
@@ -1503,10 +1368,9 @@ i
 i
 
 ../craftinginterpreters/test/while/var_in_body.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected expression
+Error: expected expression
 line 1 col 13..16
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/while/var_in_body.lox expected
 
 ../craftinginterpreters/test/while/syntax.lox actual
@@ -1539,17 +1403,15 @@ i
 3
 
 ../craftinginterpreters/test/while/class_in_body.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected expression
+Error: expected expression
 line 1 col 13..18
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/while/class_in_body.lox expected
 
 ../craftinginterpreters/test/while/fun_in_body.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: expected expression
+Error: expected expression
 line 1 col 13..16
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/while/fun_in_body.lox expected
 
 ../craftinginterpreters/test/method/empty_block.lox actual
@@ -1579,15 +1441,13 @@ no args
 36
 
 ../craftinginterpreters/test/method/refer_to_name.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: variable method not found', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: variable method not found
 ../craftinginterpreters/test/method/refer_to_name.lox expected
 
 ../craftinginterpreters/test/method/too_many_arguments.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Can't have more than 255 arguments
+Error: Can't have more than 255 arguments
 line 258 col 5..6
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/method/too_many_arguments.lox expected
 
 ../craftinginterpreters/test/method/print_bound_method.lox actual
@@ -1596,30 +1456,25 @@ note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 <fn method>
 
 ../craftinginterpreters/test/method/missing_arguments.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Expected 2 arguments but got 1.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Expected 2 arguments but got 1.
 ../craftinginterpreters/test/method/missing_arguments.lox expected
 
 ../craftinginterpreters/test/method/not_found.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Undefined property 'unknown'.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Undefined property 'unknown'.
 ../craftinginterpreters/test/method/not_found.lox expected
 
 ../craftinginterpreters/test/method/too_many_parameters.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Can't have more than 255 parameters.
+Error: Can't have more than 255 parameters.
 line 257 col 10..11
-', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
 ../craftinginterpreters/test/method/too_many_parameters.lox expected
 
 ../craftinginterpreters/test/method/extra_arguments.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Expected 2 arguments but got 4.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Expected 2 arguments but got 4.
 ../craftinginterpreters/test/method/extra_arguments.lox expected
 
 ../craftinginterpreters/test/operator/add_num_nil.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: type mismatch for operator +, number and Nil', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: type mismatch for operator +, number and Nil
 ../craftinginterpreters/test/operator/add_num_nil.lox expected
 
 ../craftinginterpreters/test/operator/equals_method.lox actual
@@ -1649,8 +1504,7 @@ false
 false
 
 ../craftinginterpreters/test/operator/subtract_num_nonnum.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: value String("1") is not a number', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: value String("1") is not a number
 ../craftinginterpreters/test/operator/subtract_num_nonnum.lox expected
 
 ../craftinginterpreters/test/operator/multiply.lox actual
@@ -1670,8 +1524,7 @@ note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 -3
 
 ../craftinginterpreters/test/operator/divide_nonnum_num.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: value String("1") is not a number', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: value String("1") is not a number
 ../craftinginterpreters/test/operator/divide_nonnum_num.lox expected
 
 ../craftinginterpreters/test/operator/comparison.lox actual
@@ -1718,18 +1571,15 @@ true
 true
 
 ../craftinginterpreters/test/operator/greater_num_nonnum.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: value String("1") is not a number', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: value String("1") is not a number
 ../craftinginterpreters/test/operator/greater_num_nonnum.lox expected
 
 ../craftinginterpreters/test/operator/less_or_equal_nonnum_num.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: value String("1") is not a number', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: value String("1") is not a number
 ../craftinginterpreters/test/operator/less_or_equal_nonnum_num.lox expected
 
 ../craftinginterpreters/test/operator/multiply_nonnum_num.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: value String("1") is not a number', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: value String("1") is not a number
 ../craftinginterpreters/test/operator/multiply_nonnum_num.lox expected
 
 ../craftinginterpreters/test/operator/not_equals.lox actual
@@ -1756,13 +1606,11 @@ true
 true
 
 ../craftinginterpreters/test/operator/add_bool_num.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: unsupported type for operator + Bool(true)', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: unsupported type for operator + Bool(true)
 ../craftinginterpreters/test/operator/add_bool_num.lox expected
 
 ../craftinginterpreters/test/operator/negate_nonnum.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: unary - must be applied to a number', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: unary - must be applied to a number
 ../craftinginterpreters/test/operator/negate_nonnum.lox expected
 
 ../craftinginterpreters/test/operator/add.lox actual
@@ -1773,8 +1621,7 @@ string
 string
 
 ../craftinginterpreters/test/operator/greater_or_equal_nonnum_num.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: value String("1") is not a number', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: value String("1") is not a number
 ../craftinginterpreters/test/operator/greater_or_equal_nonnum_num.lox expected
 
 ../craftinginterpreters/test/operator/equals.lox actual
@@ -1801,13 +1648,11 @@ false
 false
 
 ../craftinginterpreters/test/operator/less_nonnum_num.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: value String("1") is not a number', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: value String("1") is not a number
 ../craftinginterpreters/test/operator/less_nonnum_num.lox expected
 
 ../craftinginterpreters/test/operator/add_bool_string.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: unsupported type for operator + Bool(true)', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: unsupported type for operator + Bool(true)
 ../craftinginterpreters/test/operator/add_bool_string.lox expected
 
 ../craftinginterpreters/test/operator/divide.lox actual
@@ -1818,33 +1663,27 @@ note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 1
 
 ../craftinginterpreters/test/operator/add_string_nil.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: type mismatch for operator +, string and Nil', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: type mismatch for operator +, string and Nil
 ../craftinginterpreters/test/operator/add_string_nil.lox expected
 
 ../craftinginterpreters/test/operator/add_bool_nil.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: unsupported type for operator + Bool(true)', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: unsupported type for operator + Bool(true)
 ../craftinginterpreters/test/operator/add_bool_nil.lox expected
 
 ../craftinginterpreters/test/operator/divide_num_nonnum.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: value String("1") is not a number', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: value String("1") is not a number
 ../craftinginterpreters/test/operator/divide_num_nonnum.lox expected
 
 ../craftinginterpreters/test/operator/multiply_num_nonnum.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: value String("1") is not a number', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: value String("1") is not a number
 ../craftinginterpreters/test/operator/multiply_num_nonnum.lox expected
 
 ../craftinginterpreters/test/operator/less_or_equal_num_nonnum.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: value String("1") is not a number', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: value String("1") is not a number
 ../craftinginterpreters/test/operator/less_or_equal_num_nonnum.lox expected
 
 ../craftinginterpreters/test/operator/greater_nonnum_num.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: value String("1") is not a number', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: value String("1") is not a number
 ../craftinginterpreters/test/operator/greater_nonnum_num.lox expected
 
 ../craftinginterpreters/test/operator/not.lox actual
@@ -1867,8 +1706,7 @@ false
 false
 
 ../craftinginterpreters/test/operator/add_nil_nil.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: unsupported type for operator + Nil', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: unsupported type for operator + Nil
 ../craftinginterpreters/test/operator/add_nil_nil.lox expected
 
 ../craftinginterpreters/test/operator/subtract.lox actual
@@ -1879,8 +1717,7 @@ note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 0
 
 ../craftinginterpreters/test/operator/subtract_nonnum_num.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: value String("1") is not a number', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: value String("1") is not a number
 ../craftinginterpreters/test/operator/subtract_nonnum_num.lox expected
 
 ../craftinginterpreters/test/operator/not_class.lox actual
@@ -1891,19 +1728,16 @@ false
 false
 
 ../craftinginterpreters/test/operator/greater_or_equal_num_nonnum.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: value String("1") is not a number', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: value String("1") is not a number
 ../craftinginterpreters/test/operator/greater_or_equal_num_nonnum.lox expected
 
 ../craftinginterpreters/test/operator/less_num_nonnum.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: value String("1") is not a number', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: value String("1") is not a number
 ../craftinginterpreters/test/operator/less_num_nonnum.lox expected
 
 ../craftinginterpreters/test/constructor/call_init_explicitly.lox actual
 Foo.init(one)
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: variable this not found', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: variable this not found
 ../craftinginterpreters/test/constructor/call_init_explicitly.lox expected
 Foo.init(one)
 Foo.init(two)
@@ -1919,8 +1753,7 @@ not initializer
 not initializer
 
 ../craftinginterpreters/test/constructor/missing_arguments.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Expected 2 arguments but got 1.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Expected 2 arguments but got 1.
 ../craftinginterpreters/test/constructor/missing_arguments.lox expected
 
 ../craftinginterpreters/test/constructor/default.lox actual
@@ -1930,43 +1763,37 @@ Foo instance
 
 ../craftinginterpreters/test/constructor/arguments.lox actual
 init
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: variable this not found', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: variable this not found
 ../craftinginterpreters/test/constructor/arguments.lox expected
 init
 1
 2
 
 ../craftinginterpreters/test/constructor/default_arguments.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Expected 0 arguments but got 3.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Expected 0 arguments but got 3.
 ../craftinginterpreters/test/constructor/default_arguments.lox expected
 
 ../craftinginterpreters/test/constructor/call_init_early_return.lox actual
 init
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: variable this not found', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: variable this not found
 ../craftinginterpreters/test/constructor/call_init_early_return.lox expected
 init
 init
 Foo instance
 
 ../craftinginterpreters/test/constructor/extra_arguments.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Expected 2 arguments but got 4.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Expected 2 arguments but got 4.
 ../craftinginterpreters/test/constructor/extra_arguments.lox expected
 
 ../craftinginterpreters/test/constructor/return_in_nested_function.lox actual
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: Can't return a value from an initializer.', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: Can't return a value from an initializer.
 ../craftinginterpreters/test/constructor/return_in_nested_function.lox expected
 bar
 Foo instance
 
 ../craftinginterpreters/test/constructor/early_return.lox actual
 init
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value: variable this not found', src/main.rs:65:58
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Error: variable this not found
 ../craftinginterpreters/test/constructor/early_return.lox expected
 init
 Foo instance
