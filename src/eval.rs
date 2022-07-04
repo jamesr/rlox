@@ -1,4 +1,6 @@
-use std::{cell::RefCell, collections::HashMap, fmt::Display, rc::Rc, time::Instant};
+use std::{
+    borrow::Borrow, cell::RefCell, collections::HashMap, fmt::Display, rc::Rc, time::Instant,
+};
 
 use crate::{
     ast, env,
@@ -38,9 +40,17 @@ impl ClassCallable {
     }
 }
 
+type MethodMap = HashMap<String, by_address::ByAddress<Rc<dyn Callable>>>;
 #[derive(Debug, PartialEq)]
 pub struct Class {
     name: String,
+    methods: MethodMap,
+}
+
+impl Class {
+    fn new(name: String, methods: MethodMap) -> Self {
+        Class { name, methods }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -62,6 +72,12 @@ impl Instance {
             return Ok(value.clone());
         }
 
+        let class = (*self.class).borrow();
+
+        if let Some(method) = class.methods.get(name) {
+            return Ok(Value::Callable(method.clone()));
+        }
+
         Err(error::RuntimeError::Message(format!(
             "Undefined property '{}'.",
             name
@@ -71,12 +87,6 @@ impl Instance {
     fn set(&mut self, name: String, value: Value) -> ExprResult {
         self.fields.insert(name, value.clone());
         Ok(value)
-    }
-}
-
-impl Class {
-    fn new(name: String) -> Self {
-        Class { name }
     }
 }
 
@@ -103,7 +113,9 @@ impl Display for Value {
             Value::Number(n) => write!(f, "{}", n),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Callable(_) => write!(f, "<fn>"),
-            Value::Instance(i) => write!(f, "<instance of {}>", &i.borrow().class.name),
+            Value::Instance(i) => {
+                write!(f, "<instance of {}>", &RefCell::borrow(&*i).class.name)
+            }
             Value::Nil => write!(f, "nil"),
         }
     }
@@ -199,7 +211,7 @@ impl Interpreter {
         }
         .unwrap();
 
-        let env_ref = env.borrow();
+        let env_ref = RefCell::borrow(&*env);
 
         env_ref.get(name)
     }
@@ -319,7 +331,7 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
     fn visit_get(&mut self, g: &ast::GetExpr) -> ExprResult {
         let object = self.visit_expr(&g.object)?;
         if let Value::Instance(instance) = object {
-            return instance.borrow().get(&g.name);
+            return RefCell::borrow(&*instance).get(&g.name);
         }
 
         Err(error::RuntimeError::Message(
@@ -467,7 +479,18 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
 
     fn visit_class_stmt(&mut self, c: &ast::ClassStmt) -> StmtResult {
         self.env_mut().define(c.name.clone(), Value::Nil);
-        let class = Rc::new(Class::new(c.name.clone()));
+
+        let mut methods = HashMap::new();
+
+        for method in &c.methods {
+            //methods: HashMap<String, by_address::ByAddress<Rc<dyn Callable>>>,
+            let function = function::Function::new(&method, self.env.clone());
+            let fn_rc: Rc<dyn Callable> = Rc::new(function);
+
+            methods.insert(method.name.clone(), by_address::ByAddress(fn_rc));
+        }
+
+        let class = Rc::new(Class::new(c.name.clone(), methods));
         let class_callable: by_address::ByAddress<Rc<dyn Callable>> =
             by_address::ByAddress(Rc::new(ClassCallable::new(class)));
         self.env_mut()

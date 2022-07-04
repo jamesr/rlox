@@ -15,6 +15,7 @@ enum VariableState {
 enum FunctionType {
     None,
     Function,
+    Method,
 }
 
 pub struct Resolver<'a> {
@@ -216,6 +217,11 @@ impl visitor::Visitor<Result, Result> for Resolver<'_> {
     fn visit_class_stmt(&mut self, c: &ast::ClassStmt) -> Result {
         self.declare(c.name.clone());
         self.define(c.name.clone());
+
+        for method in &c.methods {
+            self.resolve_function(&method, FunctionType::Method)?;
+        }
+
         Ok(())
     }
 }
