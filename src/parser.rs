@@ -201,18 +201,10 @@ impl<'a> Parser<'a> {
     }
 
     fn prime(&self) -> anyhow::Result<(), error::ParseError> {
-        let first = match self.state.borrow_mut().scanner.next() {
-            Some(result) => result,
-            None => {
-                return Err(self
-                    .state
-                    .borrow()
-                    .scanner
-                    .error("expected expression".to_string())
-                    .into())
-            }
-        }?;
-        self.state.borrow_mut().current = Some(first);
+        let first = self.state.borrow_mut().scanner.next();
+        if first.is_some() {
+            self.state.borrow_mut().current = Some(first.unwrap()?);
+        }
         Ok(())
     }
 
