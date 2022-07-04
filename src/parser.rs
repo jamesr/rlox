@@ -628,6 +628,9 @@ impl<'a> Parser<'a> {
 
         let body = self.statement()?;
 
+        // for (initializer; condition; increment) {
+        //  body ;
+        // }
         // desugar to:
         // {
         //    initializer;
