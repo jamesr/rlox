@@ -1,7 +1,5 @@
 use std::ops::Range;
 
-use anyhow::anyhow;
-
 use crate::eval;
 
 #[derive(Default, Debug)]
@@ -10,7 +8,16 @@ pub struct Location {
     pub col: Range<usize>,
 }
 
-#[derive(Debug, Default)]
+impl Clone for Location {
+    fn clone(&self) -> Self {
+        Location {
+            line: self.line,
+            col: self.col.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone)]
 pub struct ParseError {
     pub message: String,
     pub loc: Location,
@@ -20,17 +27,12 @@ impl ParseError {
     pub fn new(message: String, loc: Location) -> ParseError {
         ParseError { message, loc }
     }
-}
 
-impl From<ParseError> for anyhow::Error {
-    fn from(e: ParseError) -> Self {
-        anyhow!(
-            "{} at line {} columns {}..{}",
-            e.message,
-            e.loc.line,
-            e.loc.col.start,
-            e.loc.col.end
-        )
+    pub fn with_message(message: &str) -> ParseError {
+        ParseError {
+            message: message.to_string(),
+            ..Default::default()
+        }
     }
 }
 
@@ -74,8 +76,10 @@ impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{}\nline {} col {}..{}",
-            self.message, self.loc.line, self.loc.col.start, self.loc.col.end
+            "{}\n", //line {} col {}..{}",
+            self.message,
+            //self.loc.line,
+            // self.loc.col.start, self.loc.col.end
         )
     }
 }
@@ -140,16 +144,8 @@ impl From<RuntimeError> for Error {
     }
 }
 
-pub fn convert_parse(v: &[ParseError]) -> anyhow::Error {
-    anyhow!(v
-        .iter()
-        .fold(String::new(), |s, e| s + &e.to_string() + "\n"))
-}
-
-pub fn convert(v: &[Error]) -> anyhow::Error {
-    anyhow!(v
-        .iter()
-        .fold(String::new(), |s, e| s + &e.to_string() + "\n"))
+pub fn convert_parse(v: &[ParseError]) -> Error {
+    Error::Parse(v[0].clone())
 }
 
 impl std::fmt::Display for Error {

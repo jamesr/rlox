@@ -1,4 +1,3 @@
-use anyhow::anyhow;
 use std::io;
 use std::{fs::File, io::Read, io::Write};
 
@@ -15,7 +14,7 @@ pub mod resolver;
 pub mod scanner;
 pub mod visitor;
 
-fn run(source: &str, interpreter: &mut Interpreter) -> anyhow::Result<(), anyhow::Error> {
+fn run(source: &str, interpreter: &mut Interpreter) -> Result<(), error::Error> {
     let stmts = match parser::parse(source) {
         Ok(s) => s,
         Err(v) => {
@@ -24,19 +23,19 @@ fn run(source: &str, interpreter: &mut Interpreter) -> anyhow::Result<(), anyhow
     };
     let mut resolver = resolver::Resolver::new(interpreter);
     resolver.resolve(&stmts)?;
-    interpreter
-        .interpret(&stmts)
-        .map_err(|e| anyhow!(e.to_string()))?;
+    interpreter.interpret(&stmts)?;
     if interpreter.has_error() {
         for e in interpreter.errors() {
             println!("{}", e);
         }
-        return Err(anyhow!("interpretation failed"));
+        return Err(error::Error::Runtime(error::RuntimeError::Message(
+            "interpretation failed".to_string(),
+        )));
     }
     Ok(())
 }
 
-fn run_file(filename: &str) -> anyhow::Result<(), anyhow::Error> {
+fn run_file(filename: &str) -> Result<(), error::Error> {
     let mut file = File::open(filename)?;
     let mut contents = String::new();
     let mut interpreter = Interpreter::new();
@@ -45,7 +44,7 @@ fn run_file(filename: &str) -> anyhow::Result<(), anyhow::Error> {
     Ok(())
 }
 
-fn run_prompt() -> anyhow::Result<(), error::Error> {
+fn run_prompt() -> Result<(), error::Error> {
     let mut interpreter = Interpreter::new();
     loop {
         print!("> ");
@@ -65,9 +64,16 @@ fn main() {
     match std::env::args().len() {
         2 => match run_file(&std::env::args().nth(1).unwrap()) {
             Ok(_) => {}
-            Err(e) => {
-                println!("Error: {}", e);
-            }
+            Err(e) => match e {
+                error::Error::Parse(_) => {
+                    _ = write!(std::io::stderr(), "{}\n", &e);
+                    std::process::exit(65);
+                }
+                error::Error::Runtime(_) => {
+                    _ = write!(std::io::stderr(), "{}\n[line 1]\n", &e);
+                    std::process::exit(70);
+                }
+            },
         },
         1 => run_prompt().unwrap(),
         _ => println!("Usage: rlox [script]"),

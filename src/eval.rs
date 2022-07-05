@@ -10,11 +10,7 @@ use crate::{
 };
 
 pub trait Callable: std::fmt::Debug {
-    fn call(
-        &self,
-        interpreter: &mut Interpreter,
-        args: Vec<Value>,
-    ) -> anyhow::Result<Value, RuntimeError>;
+    fn call(&self, interpreter: &mut Interpreter, args: Vec<Value>) -> Result<Value, RuntimeError>;
 
     fn arity(&self) -> usize;
 }
@@ -39,7 +35,7 @@ impl Display for Value {
             Value::Callable(_) => write!(f, "<fn>"),
             Value::Class(c) => write!(f, "{}", &c.class.name),
             Value::Instance(i) => {
-                write!(f, "<instance of {}>", &RefCell::borrow(&*i).class.name)
+                write!(f, "{} instance", &RefCell::borrow(&*i).class.name)
             }
             Value::Nil => write!(f, "nil"),
         }
@@ -53,8 +49,8 @@ pub struct Interpreter {
     locals: HashMap<u64, usize>,
 }
 
-type ExprResult = anyhow::Result<Value, RuntimeError>;
-type StmtResult = anyhow::Result<(), RuntimeError>;
+type ExprResult = Result<Value, RuntimeError>;
+type StmtResult = Result<(), RuntimeError>;
 
 impl Interpreter {
     pub fn new() -> Interpreter {
@@ -172,7 +168,7 @@ impl Callable for Clock {
         &self,
         _interpreter: &mut Interpreter,
         _args: Vec<Value>,
-    ) -> anyhow::Result<Value, RuntimeError> {
+    ) -> Result<Value, RuntimeError> {
         Ok(Value::Number(self.start.elapsed().as_secs_f64()))
     }
     fn arity(&self) -> usize {
@@ -188,10 +184,10 @@ fn truthy(v: &Value) -> bool {
     }
 }
 
-fn as_number(v: &Value) -> anyhow::Result<f64, RuntimeError> {
+fn as_number(v: &Value) -> Result<f64, RuntimeError> {
     match v {
         Value::Number(n) => Ok(*n),
-        _ => Err(format!("value {:?} is not a number", v).into()),
+        _ => Err(format!("Operands must be numbers.").into()),
     }
 }
 
@@ -515,18 +511,13 @@ mod tests {
     macro_rules! eval_string_expr_test {
         ($name:ident, $source:expr, $expected_value:expr) => {
             #[test]
-            fn $name() -> anyhow::Result<(), anyhow::Error> {
+            fn $name() -> Result<(), error::Error> {
                 let mut interpreter = Interpreter::new();
 
                 let expr = parse_expression($source)?;
                 let mut resolver = resolver::Resolver::new(&mut interpreter);
                 resolver.resolve_expr(&expr)?;
-                assert_eq!(
-                    interpreter
-                        .interpret_expr(&expr)
-                        .map_err(|e| anyhow::anyhow!(e.to_string()))?,
-                    $expected_value
-                );
+                assert_eq!(interpreter.interpret_expr(&expr)?, $expected_value);
                 Ok(())
             }
         };
@@ -557,7 +548,7 @@ mod tests {
     macro_rules! eval_string_stmts_test {
         ($name:ident, $source:expr) => {
             #[test]
-            fn $name() -> anyhow::Result<(), anyhow::Error> {
+            fn $name() -> Result<(), error::Error> {
                 let mut interpreter = Interpreter::new();
 
                 let stmts = match crate::parser::parse($source) {
@@ -573,14 +564,10 @@ mod tests {
                 }
                 let mut resolver = resolver::Resolver::new(&mut interpreter);
                 resolver.resolve(&stmts)?;
-                interpreter
-                    .interpret(&stmts)
-                    .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+                interpreter.interpret(&stmts)?;
 
                 let all_tests_passed_expr = crate::parser::parse_expression("all_tests_passed")?;
-                let result = interpreter
-                    .interpret_expr(&all_tests_passed_expr)
-                    .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+                let result = interpreter.interpret_expr(&all_tests_passed_expr)?;
                 assert_eq!(result, Value::Bool(true));
                 Ok(())
             }

@@ -51,14 +51,14 @@ impl Env {
         self.values.insert(name, value);
     }
 
-    pub fn get(&self, name: &String) -> anyhow::Result<eval::Value, RuntimeError> {
+    pub fn get(&self, name: &String) -> Result<eval::Value, RuntimeError> {
         if let Some(v) = self.values.get(name) {
             return Ok(v.clone());
         }
-        Err(format!("variable {} not found", name).into())
+        Err(format!("Undefined variable '{}'.", name).into())
     }
 
-    pub fn assign(&mut self, name: String, value: eval::Value) -> anyhow::Result<(), RuntimeError> {
+    pub fn assign(&mut self, name: String, value: eval::Value) -> Result<(), RuntimeError> {
         if let hash_map::Entry::Occupied(mut entry) = self.values.entry(name.clone()) {
             entry.insert(value);
             return Ok(());

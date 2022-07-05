@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 
-use crate::ast;
 use crate::eval::Interpreter;
 use crate::visitor::{self, Visitor};
-use anyhow::anyhow;
+use crate::{ast, error};
 
 #[derive(PartialEq)]
 enum VariableState {
@@ -33,7 +32,7 @@ pub struct Resolver<'a> {
     interpreter: &'a mut Interpreter,
 }
 
-type Result = anyhow::Result<(), anyhow::Error>;
+type ResolverResult = Result<(), error::Error>;
 
 impl<'a> Resolver<'a> {
     pub fn new(interpreter: &'a mut Interpreter) -> Resolver<'a> {
@@ -45,14 +44,14 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    pub fn resolve(&mut self, v: &Vec<Box<ast::Stmt>>) -> Result {
+    pub fn resolve(&mut self, v: &Vec<Box<ast::Stmt>>) -> ResolverResult {
         for stmt in v {
             self.visit_stmt(stmt)?;
         }
         Ok(())
     }
 
-    pub fn resolve_expr(&mut self, e: &ast::Expr) -> Result {
+    pub fn resolve_expr(&mut self, e: &ast::Expr) -> ResolverResult {
         self.visit_expr(e)
     }
 
@@ -76,7 +75,11 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn resolve_function(&mut self, f: &ast::FunctionStmt, fun_type: FunctionType) -> Result {
+    fn resolve_function(
+        &mut self,
+        f: &ast::FunctionStmt,
+        fun_type: FunctionType,
+    ) -> ResolverResult {
         let enclosing_function = self.current_function;
         self.current_function = fun_type;
         self.begin_scope();
@@ -102,53 +105,54 @@ impl<'a> Resolver<'a> {
     }
 }
 
-impl visitor::Visitor<Result, Result> for Resolver<'_> {
-    fn expr_result_to_stmt_result(&self, e: Result) -> Result {
+impl visitor::Visitor<ResolverResult, ResolverResult> for Resolver<'_> {
+    fn expr_result_to_stmt_result(&self, e: ResolverResult) -> ResolverResult {
         e
     }
 
-    fn visit_literal(&mut self, _: &ast::LiteralExpr) -> Result {
+    fn visit_literal(&mut self, _: &ast::LiteralExpr) -> ResolverResult {
         Ok(())
     }
 
-    fn visit_binary_expr(&mut self, e: &ast::BinaryExpr) -> Result {
+    fn visit_binary_expr(&mut self, e: &ast::BinaryExpr) -> ResolverResult {
         self.visit_expr(&e.left)?;
         self.visit_expr(&e.right)
     }
 
-    fn visit_grouping_expr(&mut self, e: &ast::GroupingExpr) -> Result {
+    fn visit_grouping_expr(&mut self, e: &ast::GroupingExpr) -> ResolverResult {
         self.visit_expr(&e.expr)
     }
 
-    fn visit_unary_expr(&mut self, e: &ast::UnaryExpr) -> Result {
+    fn visit_unary_expr(&mut self, e: &ast::UnaryExpr) -> ResolverResult {
         self.visit_expr(&e.right)
     }
 
-    fn visit_variable(&mut self, v: &ast::VariableExpr) -> Result {
+    fn visit_variable(&mut self, v: &ast::VariableExpr) -> ResolverResult {
         if let Some(scope) = self.scopes.last() {
             if scope.get(&v.name) == Some(&VariableState::Declared) {
-                return Err(anyhow!(
-                    "Can't read local variable from its own initializer."
-                ));
+                return Err(error::ParseError::with_message(
+                    "Can't read local variable from its own initializer.",
+                )
+                .into());
             }
         }
         self.resolve_local(&v.name, v.id());
         Ok(())
     }
 
-    fn visit_assign(&mut self, a: &ast::AssignExpr) -> Result {
+    fn visit_assign(&mut self, a: &ast::AssignExpr) -> ResolverResult {
         self.visit_expr(&a.value)?;
         self.resolve_local(&a.name, a.id());
 
         Ok(())
     }
 
-    fn visit_logical(&mut self, l: &ast::LogicalExpr) -> Result {
+    fn visit_logical(&mut self, l: &ast::LogicalExpr) -> ResolverResult {
         self.visit_expr(&l.left)?;
         self.visit_expr(&l.right)
     }
 
-    fn visit_call(&mut self, c: &ast::CallExpr) -> Result {
+    fn visit_call(&mut self, c: &ast::CallExpr) -> ResolverResult {
         self.visit_expr(&c.callee)?;
 
         for arg in &c.args {
@@ -158,36 +162,43 @@ impl visitor::Visitor<Result, Result> for Resolver<'_> {
         Ok(())
     }
 
-    fn visit_set(&mut self, s: &ast::SetExpr) -> Result {
+    fn visit_set(&mut self, s: &ast::SetExpr) -> ResolverResult {
         self.resolve_expr(&s.value)?;
         self.resolve_expr(&s.object)?;
         Ok(())
     }
 
-    fn visit_get(&mut self, g: &ast::GetExpr) -> Result {
+    fn visit_get(&mut self, g: &ast::GetExpr) -> ResolverResult {
         self.resolve_expr(&g.object)
     }
 
-    fn visit_super(&mut self, s: &ast::SuperExpr) -> Result {
+    fn visit_super(&mut self, s: &ast::SuperExpr) -> ResolverResult {
         if self.current_class == ClassType::None {
-            return Err(anyhow!("Can't use 'super' outside of a class."));
+            return Err(
+                error::ParseError::with_message("Can't use 'super' outside of a class.").into(),
+            );
         }
         if self.current_class != ClassType::Subclass {
-            return Err(anyhow!("Can't use 'super' in a class with no subclass."));
+            return Err(error::ParseError::with_message(
+                "Can't use 'super' in a class with no subclass.",
+            )
+            .into());
         }
         self.resolve_local(&"super".to_string(), s.id());
         Ok(())
     }
 
-    fn visit_this(&mut self, t: &ast::ThisExpr) -> Result {
+    fn visit_this(&mut self, t: &ast::ThisExpr) -> ResolverResult {
         if self.current_class != ClassType::Class {
-            return Err(anyhow!("Can't use 'this' outside of a class."));
+            return Err(
+                error::ParseError::with_message("Can't use 'this' outside of a class.").into(),
+            );
         }
         self.resolve_local(&"this".to_string(), t.id());
         Ok(())
     }
 
-    fn visit_block(&mut self, v: &Vec<Box<ast::Stmt>>) -> Result {
+    fn visit_block(&mut self, v: &Vec<Box<ast::Stmt>>) -> ResolverResult {
         self.begin_scope();
 
         self.resolve(v)?;
@@ -197,24 +208,29 @@ impl visitor::Visitor<Result, Result> for Resolver<'_> {
         Ok(())
     }
 
-    fn visit_print_stmt(&mut self, e: &ast::Expr) -> Result {
+    fn visit_print_stmt(&mut self, e: &ast::Expr) -> ResolverResult {
         self.visit_expr(e)
     }
 
-    fn visit_return_stmt(&mut self, r: &Option<Box<ast::Expr>>) -> Result {
+    fn visit_return_stmt(&mut self, r: &Option<Box<ast::Expr>>) -> ResolverResult {
         if self.current_function == FunctionType::None {
-            return Err(anyhow!("Can't return from top-level code."));
+            return Err(
+                error::ParseError::with_message("Can't return from top-level code.").into(),
+            );
         }
         if let Some(e) = r {
             if self.current_function == FunctionType::Initializer {
-                return Err(anyhow!("Can't return a value from an initializer."));
+                return Err(error::ParseError::with_message(
+                    "Can't return a value from an initializer.",
+                )
+                .into());
             }
             self.visit_expr(e)?;
         }
         Ok(())
     }
 
-    fn visit_var_decl_stmt(&mut self, v: &ast::VarDecl) -> Result {
+    fn visit_var_decl_stmt(&mut self, v: &ast::VarDecl) -> ResolverResult {
         self.declare(v.name.clone());
         if let Some(initializer) = &v.initializer {
             self.visit_expr(initializer)?;
@@ -223,7 +239,7 @@ impl visitor::Visitor<Result, Result> for Resolver<'_> {
         Ok(())
     }
 
-    fn visit_if_stmt(&mut self, i: &ast::IfStmt) -> Result {
+    fn visit_if_stmt(&mut self, i: &ast::IfStmt) -> ResolverResult {
         self.visit_expr(&i.condition)?;
         self.visit_stmt(&i.then_branch)?;
         if let Some(stmt) = &i.else_branch {
@@ -232,12 +248,12 @@ impl visitor::Visitor<Result, Result> for Resolver<'_> {
         Ok(())
     }
 
-    fn visit_while_stmt(&mut self, w: &ast::WhileStmt) -> Result {
+    fn visit_while_stmt(&mut self, w: &ast::WhileStmt) -> ResolverResult {
         self.visit_expr(&w.condition)?;
         self.visit_stmt(&w.body)
     }
 
-    fn visit_function_stmt(&mut self, f: &std::rc::Rc<ast::FunctionStmt>) -> Result {
+    fn visit_function_stmt(&mut self, f: &std::rc::Rc<ast::FunctionStmt>) -> ResolverResult {
         self.declare(f.name.clone());
         self.define(f.name.clone());
 
@@ -250,7 +266,7 @@ impl visitor::Visitor<Result, Result> for Resolver<'_> {
         Ok(())
     }
 
-    fn visit_class_stmt(&mut self, c: &ast::ClassStmt) -> Result {
+    fn visit_class_stmt(&mut self, c: &ast::ClassStmt) -> ResolverResult {
         let enclosing_class = self.current_class;
         self.current_class = ClassType::Class;
 
@@ -261,7 +277,10 @@ impl visitor::Visitor<Result, Result> for Resolver<'_> {
             self.current_class = ClassType::Subclass;
             if let ast::Expr::Variable(v) = &**superclass {
                 if v.name == c.name {
-                    return Err(anyhow!("A class can't inherit from itself."));
+                    return Err(error::ParseError::with_message(
+                        "A class can't inherit from itself.",
+                    )
+                    .into());
                 }
             }
             self.resolve_expr(&superclass)?;

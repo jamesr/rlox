@@ -15,10 +15,10 @@ pub struct Parser<'a> {
     state: RefCell<ParserState<'a>>,
 }
 
-type ExprResult = anyhow::Result<Box<ast::Expr>, error::ParseError>;
-type StmtResult = anyhow::Result<Box<ast::Stmt>, error::ParseError>;
-type StmtsResult = anyhow::Result<Vec<Box<ast::Stmt>>, error::ParseError>;
-type ParseResult = anyhow::Result<Vec<Box<ast::Stmt>>, Vec<error::ParseError>>;
+type ExprResult = Result<Box<ast::Expr>, error::ParseError>;
+type StmtResult = Result<Box<ast::Stmt>, error::ParseError>;
+type StmtsResult = Result<Vec<Box<ast::Stmt>>, error::ParseError>;
+type ParseResult = Result<Vec<Box<ast::Stmt>>, Vec<error::ParseError>>;
 
 impl<'a> Parser<'a> {
     pub fn new(scanner: Scanner<'a>) -> Parser<'a> {
@@ -147,7 +147,7 @@ impl<'a> Parser<'a> {
 
     // function → IDENTIFIER "(" parameters? ")" block ;
     // parameters → IDENTIFIER ( "," IDENTIFIER )* ;
-    fn function(&self, kind: &str) -> anyhow::Result<Rc<FunctionStmt>, error::ParseError> {
+    fn function(&self, kind: &str) -> Result<Rc<FunctionStmt>, error::ParseError> {
         self.consume(TokenType::Identifier, &format!("Expect {} name.", kind))?;
         let name = self.previous().unwrap().lexeme.to_string();
         self.consume(
@@ -200,7 +200,7 @@ impl<'a> Parser<'a> {
         Ok(Box::new(ast::Stmt::Var(ast::VarDecl { name, initializer })))
     }
 
-    fn prime(&self) -> anyhow::Result<(), error::ParseError> {
+    fn prime(&self) -> Result<(), error::ParseError> {
         let first = self.state.borrow_mut().scanner.next();
         if first.is_some() {
             self.state.borrow_mut().current = Some(first.unwrap()?);
@@ -235,7 +235,7 @@ impl<'a> Parser<'a> {
         self.state.borrow_mut().errors.push(e);
     }
 
-    fn advance(&self) -> anyhow::Result<(), error::ParseError> {
+    fn advance(&self) -> Result<(), error::ParseError> {
         let mut current = self.state.borrow_mut().current.take();
         self.state.borrow_mut().prev = current.take();
         let mut new_current = match self.state.borrow_mut().scanner.next() {
@@ -246,7 +246,7 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn matches(&self, types: &[TokenType]) -> anyhow::Result<bool, error::ParseError> {
+    fn matches(&self, types: &[TokenType]) -> Result<bool, error::ParseError> {
         for token_type in types {
             if self.check(*token_type) {
                 self.advance()?;
@@ -256,17 +256,15 @@ impl<'a> Parser<'a> {
         Ok(false)
     }
 
-    fn consume(
-        &self,
-        token_type: TokenType,
-        message: &str,
-    ) -> anyhow::Result<(), error::ParseError> {
+    fn consume(&self, token_type: TokenType, message: &str) -> Result<(), error::ParseError> {
         if self.check(token_type) {
             return self.advance();
         }
         Err(self.error(format!(
-            "expected to find type {:?} {}",
-            token_type, message
+            "[line {}] Error at '{}': {}",
+            self.state.borrow().scanner.line(),
+            self.peek().unwrap().lexeme,
+            message,
         )))
     }
 
@@ -741,7 +739,7 @@ mod tests {
     }
 
     #[test]
-    fn block() -> anyhow::Result<(), Vec<error::ParseError>> {
+    fn block() -> Result<(), Vec<error::ParseError>> {
         let block = parse("{ 5; }")?;
 
         assert_eq!(
@@ -755,7 +753,7 @@ mod tests {
     }
 
     #[test]
-    fn if_statement() -> anyhow::Result<(), Vec<error::ParseError>> {
+    fn if_statement() -> Result<(), Vec<error::ParseError>> {
         let if_statement = parse("if ( true ) { print 5; }")?;
 
         assert_eq!(
@@ -773,7 +771,7 @@ mod tests {
     }
 
     #[test]
-    fn multiple_statements() -> anyhow::Result<(), Vec<error::ParseError>> {
+    fn multiple_statements() -> Result<(), Vec<error::ParseError>> {
         let stmts = parse(
             r#"var all_tests_passed;
            if (true) {
@@ -809,7 +807,7 @@ mod tests {
     }
 
     #[test]
-    fn logical_or() -> anyhow::Result<(), Vec<error::ParseError>> {
+    fn logical_or() -> Result<(), Vec<error::ParseError>> {
         let stmts = parse("false and true;")?;
 
         assert_eq!(
@@ -827,7 +825,7 @@ mod tests {
     }
 
     #[test]
-    fn while_loop() -> anyhow::Result<(), Vec<error::ParseError>> {
+    fn while_loop() -> Result<(), Vec<error::ParseError>> {
         let stmts = parse("while (i < 5) i = i + 1;")?;
 
         assert_eq!(
@@ -855,7 +853,7 @@ mod tests {
     }
 
     #[test]
-    fn for_loop() -> anyhow::Result<(), Vec<error::ParseError>> {
+    fn for_loop() -> Result<(), Vec<error::ParseError>> {
         //   for (var i = 0; i < 10; i = i + 1) print i;
         // Desugars to:
         //   {
@@ -905,7 +903,7 @@ mod tests {
     }
 
     #[test]
-    fn call_expression() -> anyhow::Result<()> {
+    fn call_expression() -> Result<(), error::Error> {
         let expr = parse_expression("callback(5, true)")?;
 
         assert_eq!(
@@ -923,7 +921,7 @@ mod tests {
     }
 
     #[test]
-    fn function_definition() -> anyhow::Result<(), Vec<error::ParseError>> {
+    fn function_definition() -> Result<(), Vec<error::ParseError>> {
         let source = "fun add(a, b) { print a + b; }";
         let stmts = parse(source)?;
 
@@ -944,7 +942,7 @@ mod tests {
     }
 
     #[test]
-    fn class_definition() -> anyhow::Result<(), Vec<error::ParseError>> {
+    fn class_definition() -> Result<(), Vec<error::ParseError>> {
         let source = r#"class Breakfast {
             cook() {
               print "Eggs a-fryin'!";
@@ -991,7 +989,7 @@ mod tests {
     }
 
     #[test]
-    fn class_with_superclass() -> anyhow::Result<(), Vec<error::ParseError>> {
+    fn class_with_superclass() -> Result<(), Vec<error::ParseError>> {
         let source = r#"class Breakfast < Meal {
             cook() {}
         }"#;

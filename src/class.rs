@@ -84,11 +84,7 @@ impl Instance {
 }
 
 impl eval::Callable for Callable {
-    fn call(
-        &self,
-        interpreter: &mut Interpreter,
-        args: Vec<Value>,
-    ) -> anyhow::Result<Value, RuntimeError> {
+    fn call(&self, interpreter: &mut Interpreter, args: Vec<Value>) -> Result<Value, RuntimeError> {
         let instance = Value::Instance(Rc::new(RefCell::new(Instance::new(self.class.clone()))));
 
         if let Some(initializer) = self.class.methods.get("init") {

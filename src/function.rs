@@ -49,7 +49,7 @@ impl eval::Callable for Function {
         &self,
         interpreter: &mut eval::Interpreter,
         args: Vec<eval::Value>,
-    ) -> anyhow::Result<eval::Value, RuntimeError> {
+    ) -> Result<eval::Value, RuntimeError> {
         // Make environment
         let env = Rc::new(RefCell::new(env::Env::with_parent(self.closure.clone())));
 

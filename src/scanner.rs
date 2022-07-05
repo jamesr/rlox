@@ -119,13 +119,16 @@ pub struct Scanner<'a> {
     pub current: Range<usize>, // byte indices into |source|, must be on UTF-8 char boundaries
 }
 
-type ScanResult<'a> = anyhow::Result<Token<'a>, error::ParseError>;
+type ScanResult<'a> = Result<Token<'a>, error::ParseError>;
 
 impl<'a> Scanner<'a> {
     pub fn new(source: &'a str) -> Scanner {
         Scanner {
             source,
-            loc: Loc::default(),
+            loc: Loc {
+                lines: (1..1),
+                cols: (0..0),
+            },
             current: (0..0),
         }
     }
