@@ -58,7 +58,8 @@ impl<'a> Resolver<'a> {
     fn resolve_local(&mut self, name: &String, expr_id: u64) {
         for i in (0..self.scopes.len()).rev() {
             if self.scopes[i].contains_key(name) {
-                self.interpreter.resolve(expr_id, self.scopes.len() - i - 1)
+                self.interpreter.resolve(expr_id, self.scopes.len() - i - 1);
+                return;
             }
         }
     }
@@ -110,7 +111,7 @@ impl visitor::Visitor<ResolverResult, ResolverResult> for Resolver<'_> {
         e
     }
 
-    fn visit_literal(&mut self, _: &ast::LiteralExpr) -> ResolverResult {
+    fn visit_literal(&mut self, _l: &ast::LiteralExpr) -> ResolverResult {
         Ok(())
     }
 

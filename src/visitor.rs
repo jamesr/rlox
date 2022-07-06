@@ -221,9 +221,10 @@ mod tests {
     #[test]
     fn print_binary_expr() {
         let expr = Expr::binary(
-            Box::new(Expr::literal_number(5.0)),
+            0,
+            Box::new(Expr::literal_number(0, 5.0)),
             Operator::Plus,
-            Box::new(Expr::literal_number(4.0)),
+            Box::new(Expr::literal_number(0, 4.0)),
         );
         let mut printer = AstPrinter {};
         assert_eq!(printer.visit_expr(&expr), "( 5 + 4 )");
@@ -231,7 +232,7 @@ mod tests {
 
     #[test]
     fn print_grouping_expr() {
-        let expr = Expr::grouping(Box::new(Expr::literal_number(5.0)));
+        let expr = Expr::grouping(0, Box::new(Expr::literal_number(0, 5.0)));
         let mut printer = AstPrinter {};
         assert_eq!(printer.visit_expr(&expr), "group ( 5 )");
     }
@@ -239,9 +240,9 @@ mod tests {
     #[test]
     fn print_literal() {
         let mut printer = AstPrinter {};
-        assert_eq!(printer.visit_expr(&Expr::literal_number(1.0)), "1");
+        assert_eq!(printer.visit_expr(&Expr::literal_number(0, 1.0)), "1");
         assert_eq!(
-            printer.visit_expr(&Expr::literal_string("hi".to_string())),
+            printer.visit_expr(&Expr::literal_string(0, "hi".to_string())),
             "hi"
         );
     }
@@ -251,8 +252,9 @@ mod tests {
         let mut printer = AstPrinter {};
         assert_eq!(
             printer.visit_expr(&Expr::unary(
+                0,
                 Operator::Minus,
-                Box::new(Expr::literal_number(5.0)),
+                Box::new(Expr::literal_number(0, 5.0)),
             )),
             "( - 5 )"
         );

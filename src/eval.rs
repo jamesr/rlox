@@ -184,10 +184,10 @@ fn truthy(v: &Value) -> bool {
     }
 }
 
-fn as_number(v: &Value) -> Result<f64, RuntimeError> {
+fn as_number(v: &Value, line: usize) -> Result<f64, RuntimeError> {
     match v {
         Value::Number(n) => Ok(*n),
-        _ => Err(format!("Operands must be numbers.").into()),
+        _ => Err((format!("Operands must be numbers."), line).into()),
     }
 }
 
@@ -227,16 +227,20 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
             _ => {
                 return Err(error::RuntimeError::new(
                     "Can only call functions.".to_string(),
+                    c.line(),
                 ))
             }
         };
 
         if args.len() != callable.arity() {
-            return Err(error::RuntimeError::new(format!(
-                "Expected {} arguments but got {}.",
-                callable.arity(),
-                args.len()
-            )));
+            return Err(error::RuntimeError::new(
+                format!(
+                    "Expected {} arguments but got {}.",
+                    callable.arity(),
+                    args.len()
+                ),
+                c.line(),
+            ));
         }
 
         return Ok(callable.call(self, args)?);
@@ -250,8 +254,9 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
             return instance.borrow_mut().set(s.name.clone(), value);
         }
 
-        Err(error::RuntimeError::Message(
+        Err(error::RuntimeError::new(
             "Only instances have fields.".to_string(),
+            s.line(),
         ))
     }
 
@@ -261,8 +266,9 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
             return RefCell::borrow(&*instance).get(&g.name, object);
         }
 
-        Err(error::RuntimeError::Message(
+        Err(error::RuntimeError::new(
             "Only instances have properties.".to_string(),
+            g.line(),
         ))
     }
 
@@ -270,8 +276,9 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
         let distance = match self.locals.get(&s.id()) {
             Some(d) => *d,
             None => {
-                return Err(error::RuntimeError::Message(
+                return Err(error::RuntimeError::new(
                     "'super' not found in locals".to_string(),
+                    s.line(),
                 ));
             }
         };
@@ -289,17 +296,18 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
             let method = match superclass.class.find_method(&s.name) {
                 Some(m) => m,
                 None => {
-                    return Err(error::RuntimeError::Message(format!(
-                        "Undefined property '{}'.",
-                        &s.name
-                    )));
+                    return Err(error::RuntimeError::new(
+                        format!("Undefined property '{}'.", &s.name),
+                        s.line(),
+                    ));
                 }
             };
             return Ok(method.bind(object));
         }
 
-        Err(error::RuntimeError::Message(
+        Err(error::RuntimeError::new(
             "'super' not a a class.".to_string(),
+            s.line(),
         ))
     }
 
@@ -313,35 +321,57 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
 
         use ast::Operator::*;
         match e.operator {
-            Minus => Ok(Value::Number(as_number(&left)? - as_number(&right)?)),
-            Slash => Ok(Value::Number(as_number(&left)? / as_number(&right)?)),
-            Star => Ok(Value::Number(as_number(&left)? * as_number(&right)?)),
+            Minus => Ok(Value::Number(
+                as_number(&left, e.line())? - as_number(&right, e.line())?,
+            )),
+            Slash => Ok(Value::Number(
+                as_number(&left, e.line())? / as_number(&right, e.line())?,
+            )),
+            Star => Ok(Value::Number(
+                as_number(&left, e.line())? * as_number(&right, e.line())?,
+            )),
             Plus => match left {
                 Value::Number(left_number) => match right {
                     Value::Number(right_number) => Ok(Value::Number(left_number + right_number)),
-                    _ => {
-                        Err(format!("type mismatch for operator +, number and {:?}", right).into())
-                    }
+                    _ => Err((
+                        format!("type mismatch for operator +, number and {:?}", right),
+                        e.line(),
+                    )
+                        .into()),
                 },
 
                 Value::String(left_string) => match right {
                     Value::String(right_string) => Ok(Value::String(left_string + &right_string)),
 
-                    _ => {
-                        Err(format!("type mismatch for operator +, string and {:?}", right).into())
-                    }
+                    _ => Err((
+                        format!("type mismatch for operator +, string and {:?}", right),
+                        e.line(),
+                    )
+                        .into()),
                 },
 
-                _ => Err(format!("unsupported type for operator + {:?}", left).into()),
+                _ => Err((
+                    format!("unsupported type for operator + {:?}", left),
+                    e.line(),
+                )
+                    .into()),
             },
-            Greater => Ok(Value::Bool(as_number(&left)? > as_number(&right)?)),
-            GreaterEqual => Ok(Value::Bool(as_number(&left)? >= as_number(&right)?)),
-            Less => Ok(Value::Bool(as_number(&left)? < as_number(&right)?)),
-            LessEqual => Ok(Value::Bool(as_number(&left)? <= as_number(&right)?)),
+            Greater => Ok(Value::Bool(
+                as_number(&left, e.line())? > as_number(&right, e.line())?,
+            )),
+            GreaterEqual => Ok(Value::Bool(
+                as_number(&left, e.line())? >= as_number(&right, e.line())?,
+            )),
+            Less => Ok(Value::Bool(
+                as_number(&left, e.line())? < as_number(&right, e.line())?,
+            )),
+            LessEqual => Ok(Value::Bool(
+                as_number(&left, e.line())? <= as_number(&right, e.line())?,
+            )),
             BangEqual => Ok(Value::Bool(left != right)),
             EqualEqual => Ok(Value::Bool(left == right)),
 
-            _ => Err(format!("unknown operator {}", e.operator).into()),
+            _ => Err((format!("unknown operator {}", e.operator), e.line()).into()),
         }
     }
 
@@ -355,10 +385,10 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
         match e.operator {
             Minus => match val {
                 Value::Number(n) => Ok(Value::Number(-n)),
-                _ => Err("unary - must be applied to a number".into()),
+                _ => Err(("unary - must be applied to a number", e.line()).into()),
             },
             Bang => Ok(Value::Bool(!truthy(&val))),
-            _ => Err("unsupported unary operator".into()),
+            _ => Err(("unsupported unary operator", e.line()).into()),
         }
     }
 
@@ -451,8 +481,9 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
             if let Value::Class(c) = superclass {
                 Some(ByAddress(c.class.clone()))
             } else {
-                return Err(error::RuntimeError::Message(
+                return Err(error::RuntimeError::new(
                     "Superclass must be a class.".to_string(),
+                    999,
                 ));
             }
         } else {

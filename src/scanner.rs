@@ -425,7 +425,7 @@ mod tests {
         let source = "foo";
         let scanner = Scanner::new(&source);
         assert_eq!(scanner.current(), "");
-        assert_eq!(scanner.line(), 0);
+        assert_eq!(scanner.line(), 1);
         assert_eq!(scanner.rest(), "foo");
     }
 
@@ -462,7 +462,7 @@ mod tests {
         "",
         [Token {
             token_type: LeftParen,
-            line: 0,
+            line: 1,
             lexeme: "",
             value: None,
         }; 0]
@@ -473,7 +473,7 @@ mod tests {
         "(",
         [Token {
             token_type: LeftParen,
-            line: 0,
+            line: 1,
             lexeme: "(",
             value: None,
         }]
@@ -485,7 +485,7 @@ mod tests {
         (",
         [Token {
             token_type: LeftParen,
-            line: 1,
+            line: 2,
             lexeme: "(",
             value: None,
         }]
@@ -496,7 +496,7 @@ mod tests {
         "\"hello, world\"",
         [Token {
             token_type: String,
-            line: 0,
+            line: 1,
             lexeme: "\"hello, world\"",
             value: Some(TokenValue::String("hello, world")),
         }]
@@ -508,19 +508,19 @@ mod tests {
         [
             Token {
                 token_type: Number,
-                line: 0,
+                line: 1,
                 lexeme: "123",
                 value: Some(TokenValue::Number(123.0)),
             },
             Token {
                 token_type: Minus,
-                line: 1,
+                line: 2,
                 lexeme: "-",
                 value: None,
             },
             Token {
                 token_type: Number,
-                line: 1,
+                line: 2,
                 lexeme: "456",
                 value: Some(TokenValue::Number(456.0)),
             },
@@ -534,31 +534,31 @@ mod tests {
         [
             Token {
                 token_type: Number,
-                line: 0,
+                line: 1,
                 lexeme: "0.25",
                 value: Some(TokenValue::Number(0.25)),
             },
             Token {
                 token_type: Number,
-                line: 1,
+                line: 2,
                 lexeme: "25",
                 value: Some(TokenValue::Number(25.0)),
             },
             Token {
                 token_type: Dot,
-                line: 1,
+                line: 2,
                 lexeme: ".",
                 value: None,
             },
             Token {
                 token_type: LeftParen,
-                line: 1,
+                line: 2,
                 lexeme: "(",
                 value: None,
             },
             Token {
                 token_type: RightParen,
-                line: 1,
+                line: 2,
                 lexeme: ")",
                 value: None,
             },
@@ -572,25 +572,25 @@ mod tests {
         [
             Token {
                 token_type: LeftParen,
-                line: 0,
+                line: 1,
                 lexeme: "(",
                 value: None,
             },
             Token {
                 token_type: Number,
-                line: 1,
+                line: 2,
                 lexeme: "0",
                 value: None,
             },
             Token {
                 token_type: Slash,
-                line: 1,
+                line: 2,
                 lexeme: "/",
                 value: None,
             },
             Token {
                 token_type: Number,
-                line: 1,
+                line: 2,
                 lexeme: "5",
                 value: None,
             }
@@ -608,49 +608,49 @@ mod tests {
         [
             Token {
                 token_type: Identifier,
-                line: 0,
+                line: 1,
                 lexeme: "foo",
                 value: None,
             },
             Token {
                 token_type: True,
-                line: 1,
+                line: 2,
                 lexeme: "true",
                 value: None,
             },
             Token {
                 token_type: And,
-                line: 1,
+                line: 2,
                 lexeme: "and",
                 value: None,
             },
             Token {
                 token_type: False,
-                line: 1,
+                line: 2,
                 lexeme: "false",
                 value: None,
             },
             Token {
                 token_type: Identifier,
-                line: 2,
+                line: 3,
                 lexeme: "superman",
                 value: None,
             },
             Token {
                 token_type: Identifier,
-                line: 3,
+                line: 4,
                 lexeme: "with_underscores_And_Caps",
                 value: None,
             },
             Token {
                 token_type: Identifier,
-                line: 4,
+                line: 5,
                 lexeme: "StartsWithCaps",
                 value: None,
             },
             Token {
                 token_type: Identifier,
-                line: 5,
+                line: 6,
                 lexeme: "with_digits_420",
                 value: None,
             },

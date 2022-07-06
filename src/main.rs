@@ -28,8 +28,9 @@ fn run(source: &str, interpreter: &mut Interpreter) -> Result<(), error::Error> 
         for e in interpreter.errors() {
             println!("{}", e);
         }
-        return Err(error::Error::Runtime(error::RuntimeError::Message(
+        return Err(error::Error::Runtime(error::RuntimeError::new(
             "interpretation failed".to_string(),
+            999,
         )));
     }
     Ok(())

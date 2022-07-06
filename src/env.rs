@@ -55,7 +55,7 @@ impl Env {
         if let Some(v) = self.values.get(name) {
             return Ok(v.clone());
         }
-        Err(format!("Undefined variable '{}'.", name).into())
+        Err((format!("Undefined variable '{}'.", name), 999).into())
     }
 
     pub fn assign(&mut self, name: String, value: eval::Value) -> Result<(), RuntimeError> {
@@ -63,6 +63,6 @@ impl Env {
             entry.insert(value);
             return Ok(());
         }
-        Err(format!("Undefined variable '{}'.", name).into())
+        Err((format!("Undefined variable '{}'.", name), 999).into())
     }
 }

@@ -95,32 +95,32 @@ impl From<std::io::Error> for Error {
 
 #[derive(Debug)]
 pub enum RuntimeError {
-    Message(String),
+    Error((String, usize)),
     Return(eval::Value),
 }
 
 impl RuntimeError {
-    pub fn new(message: String) -> Self {
-        Self::Message(message)
+    pub fn new(message: String, line: usize) -> Self {
+        Self::Error((message, line))
     }
 }
 
-impl From<String> for RuntimeError {
-    fn from(m: String) -> Self {
-        Self::new(m)
+impl From<(String, usize)> for RuntimeError {
+    fn from(t: (String, usize)) -> Self {
+        Self::new(t.0, t.1)
     }
 }
 
-impl From<&str> for RuntimeError {
-    fn from(m: &str) -> Self {
-        Self::new(m.to_string())
+impl From<(&str, usize)> for RuntimeError {
+    fn from(t: (&str, usize)) -> Self {
+        Self::new(t.0.to_string(), t.1)
     }
 }
 
 impl std::fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RuntimeError::Message(m) => write!(f, "{}", m),
+            RuntimeError::Error(e) => write!(f, "{}\n[line {}]", e.0, e.1),
             RuntimeError::Return(v) => write!(f, "return {}", v),
         }
     }
@@ -163,7 +163,7 @@ mod tests {
 
     #[test]
     fn make_runtime_error() {
-        let _msg_err = error::RuntimeError::Message("hi".to_string());
+        let _msg_err = error::RuntimeError::Error(("hi".to_string(), 1));
         let _return_err = error::RuntimeError::Return(eval::Value::Nil);
     }
 }

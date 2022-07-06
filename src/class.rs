@@ -71,10 +71,10 @@ impl Instance {
             return Ok(method.bind(this));
         }
 
-        Err(RuntimeError::Message(format!(
-            "Undefined property '{}'.",
-            name
-        )))
+        Err(RuntimeError::new(
+            format!("Undefined property '{}'.", name),
+            999,
+        ))
     }
 
     pub fn set(&mut self, name: String, value: Value) -> Result<Value, RuntimeError> {

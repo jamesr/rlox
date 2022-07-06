@@ -17,117 +17,132 @@ pub enum Expr {
 }
 
 impl Expr {
-    pub fn unary(operator: Operator, right: Box<Expr>) -> Expr {
+    pub fn unary(line: usize, operator: Operator, right: Box<Expr>) -> Expr {
         Expr::Unary(UnaryExpr {
             id: generate_expr_id(),
+            line,
             operator,
             right,
         })
     }
 
-    pub fn binary(left: Box<Expr>, operator: Operator, right: Box<Expr>) -> Expr {
+    pub fn binary(line: usize, left: Box<Expr>, operator: Operator, right: Box<Expr>) -> Expr {
         Expr::Binary(BinaryExpr {
             id: generate_expr_id(),
+            line,
             left,
             operator,
             right,
         })
     }
 
-    pub fn grouping(expr: Box<Expr>) -> Expr {
+    pub fn grouping(line: usize, expr: Box<Expr>) -> Expr {
         Expr::Grouping(GroupingExpr {
             id: generate_expr_id(),
+            line,
             expr,
         })
     }
 
-    pub fn literal_string(s: String) -> Expr {
+    pub fn literal_string(line: usize, s: String) -> Expr {
         Expr::Literal(LiteralExpr {
             id: generate_expr_id(),
+            line,
             value: LiteralValue::String(s),
         })
     }
 
-    pub fn literal_number(n: f64) -> Expr {
+    pub fn literal_number(line: usize, n: f64) -> Expr {
         Expr::Literal(LiteralExpr {
             id: generate_expr_id(),
+            line,
             value: LiteralValue::Number(n),
         })
     }
 
-    pub fn literal_bool(b: bool) -> Expr {
+    pub fn literal_bool(line: usize, b: bool) -> Expr {
         Expr::Literal(LiteralExpr {
             id: generate_expr_id(),
+            line,
             value: LiteralValue::Bool(b),
         })
     }
 
-    pub fn literal_nil() -> Expr {
+    pub fn literal_nil(line: usize) -> Expr {
         Expr::Literal(LiteralExpr {
             id: generate_expr_id(),
+            line,
             value: LiteralValue::Nil,
         })
     }
 
-    pub fn variable(name: String) -> Expr {
+    pub fn variable(line: usize, name: String) -> Expr {
         Expr::Variable(VariableExpr {
             id: generate_expr_id(),
+            line,
             name,
         })
     }
 
-    pub fn assign(name: String, value: Box<Expr>) -> Expr {
+    pub fn assign(line: usize, name: String, value: Box<Expr>) -> Expr {
         Expr::Assign(AssignExpr {
             id: generate_expr_id(),
+            line,
             name,
             value,
         })
     }
 
-    pub fn logical(left: Box<Expr>, operator: Operator, right: Box<Expr>) -> Expr {
+    pub fn logical(line: usize, left: Box<Expr>, operator: Operator, right: Box<Expr>) -> Expr {
         Expr::Logical(LogicalExpr {
             id: generate_expr_id(),
+            line,
             left,
             operator,
             right,
         })
     }
 
-    pub fn call(callee: Box<Expr>, args: Vec<Box<Expr>>) -> Expr {
+    pub fn call(line: usize, callee: Box<Expr>, args: Vec<Box<Expr>>) -> Expr {
         Expr::Call(CallExpr {
             id: generate_expr_id(),
+            line,
             callee,
             args,
         })
     }
 
-    pub fn get(object: Box<Expr>, name: String) -> Expr {
+    pub fn get(line: usize, object: Box<Expr>, name: String) -> Expr {
         Expr::Get(GetExpr {
             id: generate_expr_id(),
+            line,
             object,
             name,
         })
     }
 
-    pub fn set(object: Box<Expr>, name: String, value: Box<Expr>) -> Expr {
+    pub fn set(line: usize, object: Box<Expr>, name: String, value: Box<Expr>) -> Expr {
         Expr::Set(SetExpr {
             id: generate_expr_id(),
+            line,
             object,
             name,
             value,
         })
     }
 
-    pub fn super_expr(name: String) -> Expr {
+    pub fn super_expr(line: usize, name: String) -> Expr {
         Expr::Super(SuperExpr {
             id: generate_expr_id(),
+            line,
             name,
         })
     }
 
-    pub fn this() -> Expr {
+    pub fn this(line: usize) -> Expr {
         Expr::This(ThisExpr {
             id: generate_expr_id(),
+            line,
         })
     }
 }
@@ -150,95 +165,69 @@ pub enum Operator {
     Or,
 }
 
-#[derive(Debug)]
-pub struct UnaryExpr {
-    id: u64,
-    pub operator: Operator,
-    pub right: Box<Expr>,
+macro_rules! partial_eq_expr_field_eq {
+    ($self:ident, $other:ident, ) => {
+        true
+    };
+
+    ($self:ident, $other:ident, $field:ident) => {
+        $self.$field == $other.$field
+    };
+
+    ($self:ident, $other:ident, $field:ident, $($fields:ident),*) => {
+        partial_eq_expr_field_eq!($self, $other, $field) &&
+        partial_eq_expr_field_eq!($self, $other, $($fields),*)
+    };
 }
 
-#[derive(Debug)]
-pub struct BinaryExpr {
-    id: u64,
-    pub left: Box<Expr>,
-    pub operator: Operator,
-    pub right: Box<Expr>,
+macro_rules! define_expr {
+    ($name:ident, $($field:ident: $type:ty),*) => {
+        #[derive(Debug)]
+        pub struct $name {
+            id: u64,
+            line: usize,
+            //line: u64,
+            $(pub $field: $type,)*
+        }
+
+        impl $name {
+            pub fn id(self: &$name) -> u64 { self.id }
+            pub fn line(self: &$name) -> usize { self.line }
+        }
+
+        impl PartialEq for $name {
+            #[allow(unused_variables)]
+            fn eq(self: &$name, other: &Self) -> bool {
+                partial_eq_expr_field_eq!(self, other, $($field),*)
+            }
+        }
+
+        impl Eq for $name {}
+    };
 }
 
-#[derive(Debug)]
-pub struct GroupingExpr {
-    id: u64,
-    pub expr: Box<Expr>,
-}
-
-#[derive(Debug)]
-pub struct LiteralExpr {
-    id: u64,
-    pub value: LiteralValue,
-}
-
-#[derive(PartialEq, Debug)]
-pub enum LiteralValue {
-    String(String),
-    Number(f64),
-    Bool(bool),
-    Nil,
-}
-
-#[derive(Debug)]
-pub struct VariableExpr {
-    id: u64,
-    pub name: String,
-}
-
-#[derive(Debug)]
-pub struct AssignExpr {
-    id: u64,
-    pub name: String,
-    pub value: Box<Expr>,
-}
-
-#[derive(Debug)]
-pub struct LogicalExpr {
-    id: u64,
-    pub left: Box<Expr>,
-    pub operator: Operator,
-    pub right: Box<Expr>,
-}
-
-#[derive(Debug)]
-pub struct CallExpr {
-    id: u64,
-    pub callee: Box<Expr>,
-    pub args: Vec<Box<Expr>>,
-    // TODO: Track source location for error reporting
-}
-
-#[derive(Debug)]
-pub struct SetExpr {
-    id: u64,
-    pub object: Box<Expr>,
-    pub name: String,
-    pub value: Box<Expr>,
-}
-
-#[derive(Debug)]
-pub struct SuperExpr {
-    id: u64,
-    pub name: String,
-}
-
-#[derive(Debug)]
-pub struct ThisExpr {
-    id: u64,
-}
-
-#[derive(Debug)]
-pub struct GetExpr {
-    id: u64,
-    pub object: Box<Expr>,
-    pub name: String,
-}
+define_expr!(UnaryExpr, operator: Operator, right: Box<Expr>);
+define_expr!(
+    BinaryExpr,
+    left: Box<Expr>,
+    operator: Operator,
+    right: Box<Expr>
+);
+define_expr!(GroupingExpr, expr: Box<Expr>);
+define_expr!(LiteralExpr, value: LiteralValue);
+define_expr!(VariableExpr, name: String);
+define_expr!(AssignExpr, name: String, value: Box<Expr>);
+define_expr!(
+    LogicalExpr,
+    left: Box<Expr>,
+    operator: Operator,
+    right: Box<Expr>
+);
+define_expr!(CallExpr, callee: Box<Expr>, args: Vec<Box<Expr>>);
+define_expr!(SetExpr, object: Box<Expr>, name: String, value: Box<Expr>);
+define_expr!(SuperExpr, name: String);
+define_expr!(ThisExpr,);
+define_expr!(GetExpr, object: Box<Expr>, name: String);
 
 #[derive(PartialEq, Debug)]
 pub enum Stmt {
@@ -251,6 +240,14 @@ pub enum Stmt {
     While(WhileStmt),
     Function(Rc<FunctionStmt>),
     Class(ClassStmt),
+}
+
+#[derive(PartialEq, Debug)]
+pub enum LiteralValue {
+    String(String),
+    Number(f64),
+    Bool(bool),
+    Nil,
 }
 
 #[derive(PartialEq, Debug)]
@@ -310,51 +307,6 @@ impl std::fmt::Display for Operator {
         )
     }
 }
-
-macro_rules! partial_eq_expr_field_eq {
-    ($self:ident, $other:ident, ) => {
-        true
-    };
-
-    ($self:ident, $other:ident, $field:ident) => {
-        $self.$field == $other.$field
-    };
-
-    ($self:ident, $other:ident, $field:ident, $($fields:ident),*) => {
-        partial_eq_expr_field_eq!($self, $other, $field) &&
-        partial_eq_expr_field_eq!($self, $other, $($fields),*)
-    };
-}
-
-macro_rules! expr_impl {
-    ($expr:ident, $($fields:ident),*) => {
-        impl $expr {
-            pub fn id(self: &$expr) -> u64 { self.id }
-        }
-
-        impl PartialEq for $expr {
-            #[allow(unused_variables)]
-            fn eq(self: &$expr, other: &Self) -> bool {
-                partial_eq_expr_field_eq!(self, other, $($fields),*)
-            }
-        }
-
-        impl Eq for $expr {}
-    };
-}
-
-expr_impl!(UnaryExpr, operator, right);
-expr_impl!(BinaryExpr, left, operator, right);
-expr_impl!(GroupingExpr, expr);
-expr_impl!(LiteralExpr, value);
-expr_impl!(VariableExpr, name);
-expr_impl!(AssignExpr, name, value);
-expr_impl!(LogicalExpr, left, operator, right);
-expr_impl!(CallExpr, callee, args);
-expr_impl!(GetExpr, object, name);
-expr_impl!(SetExpr, object, name, value);
-expr_impl!(ThisExpr,);
-expr_impl!(SuperExpr, name);
 
 lazy_static::lazy_static! {
     static ref NEXT_EXPR_ID: std::sync::Mutex<u64> = Mutex::new(0);
