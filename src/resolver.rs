@@ -10,7 +10,7 @@ enum VariableState {
     Defined,
 }
 
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 enum FunctionType {
     None,
     Function,
@@ -278,12 +278,7 @@ impl visitor::Visitor<ResolverResult, ResolverResult> for Resolver<'_> {
         self.declare(f.name.clone(), 999)?;
         self.define(f.name.clone());
 
-        let fun_type = if f.name == "init" {
-            FunctionType::Initializer
-        } else {
-            FunctionType::Function
-        };
-        self.resolve_function(f, fun_type)?;
+        self.resolve_function(f, FunctionType::Function)?;
         Ok(())
     }
 
@@ -316,7 +311,12 @@ impl visitor::Visitor<ResolverResult, ResolverResult> for Resolver<'_> {
         self.define("this".to_string());
 
         for method in &c.methods {
-            self.resolve_function(&method, FunctionType::Method)?;
+            let fun_type = if method.name == "init" {
+                FunctionType::Initializer
+            } else {
+                FunctionType::Method
+            };
+            self.resolve_function(&method, fun_type)?;
         }
 
         self.end_scope();

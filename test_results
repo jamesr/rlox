@@ -390,8 +390,9 @@ Passed: 197 Failed: 28 Skipped: 15 (test/operator/less_num_nonnum.lox)
 Passed: 198 Failed: 28 Skipped: 15 (test/constructor/call_init_explicitly.lox)
 Passed: 199 Failed: 28 Skipped: 15 (test/constructor/return_value.lox)
 FAIL test/constructor/return_value.lox
+     Unexpected error:
+     [line 0] Error at 'return': Can't return a value from an initializer.
      Missing expected error: [3] Error at 'return': Can't return a value from an initializer.
-     Expected return code 65 and got 0. Stderr:
 
 
 Passed: 199 Failed: 29 Skipped: 15 (test/constructor/init_not_method.lox)
@@ -402,17 +403,7 @@ Passed: 203 Failed: 29 Skipped: 15 (test/constructor/default_arguments.lox)
 Passed: 204 Failed: 29 Skipped: 15 (test/constructor/call_init_early_return.lox)
 Passed: 205 Failed: 29 Skipped: 15 (test/constructor/extra_arguments.lox)
 Passed: 206 Failed: 29 Skipped: 15 (test/constructor/return_in_nested_function.lox)
-FAIL test/constructor/return_in_nested_function.lox
-     Unexpected error:
-     [line 0] Error at 'return': Can't return a value from an initializer.
-     Expected return code 0 and got 65. Stderr:
-     [line 0] Error at 'return': Can't return a value from an initializer.
-     
-     Missing expected output 'bar' on line 6.
-     Missing expected output 'Foo instance' on line 10.
-
-
-Passed: 206 Failed: 30 Skipped: 15 (test/constructor/early_return.lox)
-Passed: 207 Failed: 30 Skipped: 15 (test/block/empty.lox)
-Passed: 208 Failed: 30 Skipped: 15 (test/block/scope.lox)
-209 tests passed. 30 tests failed.
+Passed: 207 Failed: 29 Skipped: 15 (test/constructor/early_return.lox)
+Passed: 208 Failed: 29 Skipped: 15 (test/block/empty.lox)
+Passed: 209 Failed: 29 Skipped: 15 (test/block/scope.lox)
+210 tests passed. 29 tests failed.
