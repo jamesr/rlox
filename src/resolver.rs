@@ -199,7 +199,7 @@ impl visitor::Visitor<ResolverResult, ResolverResult> for Resolver<'_> {
         }
         if self.current_class != ClassType::Subclass {
             return Err(error::ParseError::with_message(
-                "Error at 'super': Can't use 'super' in a class with no subclass.",
+                "Error at 'super': Can't use 'super' in a class with no superclass.",
             )
             .into());
         }
@@ -208,7 +208,7 @@ impl visitor::Visitor<ResolverResult, ResolverResult> for Resolver<'_> {
     }
 
     fn visit_this(&mut self, t: &ast::ThisExpr) -> ResolverResult {
-        if self.current_class != ClassType::Class {
+        if self.current_class == ClassType::None {
             return Err(error::ParseError::with_message(
                 "Error at 'this': Can't use 'this' outside of a class.",
             )

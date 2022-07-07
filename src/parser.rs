@@ -237,6 +237,10 @@ impl<'a> Parser<'a> {
             Some(token) => format!("'{}'", token.lexeme),
             None => "end".to_string(),
         };
+        self.error_at(message, &peeked)
+    }
+
+    fn error_at(&self, message: &str, peeked: &str) -> error::ParseError {
         self.state
             .borrow()
             .scanner
@@ -333,7 +337,7 @@ impl<'a> Parser<'a> {
                         value,
                     )));
                 }
-                _ => {}
+                _ => return Err(self.error_at("Invalid assignment target.", "'='")),
             }
         }
 
@@ -458,7 +462,7 @@ impl<'a> Parser<'a> {
         if !self.check(TokenType::RightParen) {
             loop {
                 if args.len() >= 255 {
-                    self.add_error(self.error("Can't have more than 255 arguments"));
+                    self.add_error(self.error("Can't have more than 255 arguments."));
                 }
                 args.push(self.expression()?);
                 if !self.matches(&[TokenType::Comma])? {
