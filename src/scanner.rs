@@ -400,7 +400,9 @@ impl<'a> Iterator for Scanner<'a> {
                         } else {
                             self.loc.consume();
                             self.current.start = self.current.end;
-                            return Some(Err(self.error(format!("unexpected character '{}'", c))));
+                            return Some(Err(
+                                self.error("Error: Unexpected character.".to_string())
+                            ));
                         }
                     }
                 }

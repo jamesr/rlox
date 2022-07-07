@@ -64,10 +64,20 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn declare(&mut self, name: String) {
+    fn declare(&mut self, name: String, line: usize) -> ResolverResult {
         if let Some(map) = self.scopes.last_mut() {
+            if map.contains_key(&name) {
+                return Err(error::Error::Parse(error::ParseError::new(
+                    format!(
+                        "Error at '{}': Already a variable with this name in this scope.",
+                        name
+                    ),
+                    error::Location { line, col: 0..0 },
+                )));
+            }
             map.insert(name, VariableState::Declared);
         }
+        Ok(())
     }
 
     fn define(&mut self, name: String) {
@@ -86,7 +96,7 @@ impl<'a> Resolver<'a> {
         self.begin_scope();
 
         for p in &f.params {
-            self.declare(p.clone());
+            self.declare(p.clone(), 999)?;
             self.define(p.clone());
         }
 
@@ -132,7 +142,7 @@ impl visitor::Visitor<ResolverResult, ResolverResult> for Resolver<'_> {
         if let Some(scope) = self.scopes.last() {
             if scope.get(&v.name) == Some(&VariableState::Declared) {
                 return Err(error::ParseError::with_message(
-                    "Can't read local variable from its own initializer.",
+                    "Can't read local variable in its own initializer.",
                 )
                 .into());
             }
@@ -232,7 +242,7 @@ impl visitor::Visitor<ResolverResult, ResolverResult> for Resolver<'_> {
     }
 
     fn visit_var_decl_stmt(&mut self, v: &ast::VarDecl) -> ResolverResult {
-        self.declare(v.name.clone());
+        self.declare(v.name.clone(), 999)?;
         if let Some(initializer) = &v.initializer {
             self.visit_expr(initializer)?;
         }
@@ -255,7 +265,7 @@ impl visitor::Visitor<ResolverResult, ResolverResult> for Resolver<'_> {
     }
 
     fn visit_function_stmt(&mut self, f: &std::rc::Rc<ast::FunctionStmt>) -> ResolverResult {
-        self.declare(f.name.clone());
+        self.declare(f.name.clone(), 999)?;
         self.define(f.name.clone());
 
         let fun_type = if f.name == "init" {
@@ -271,7 +281,7 @@ impl visitor::Visitor<ResolverResult, ResolverResult> for Resolver<'_> {
         let enclosing_class = self.current_class;
         self.current_class = ClassType::Class;
 
-        self.declare(c.name.clone());
+        self.declare(c.name.clone(), 999)?;
         self.define(c.name.clone());
 
         if let Some(superclass) = &c.superclass {

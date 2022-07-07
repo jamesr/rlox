@@ -74,13 +74,7 @@ impl From<(&str, Location)> for ParseError {
 
 impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}\n", //line {} col {}..{}",
-            self.message,
-            //self.loc.line,
-            // self.loc.col.start, self.loc.col.end
-        )
+        write!(f, "[line {}] {}\n", self.loc.line, self.message,)
     }
 }
 

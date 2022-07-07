@@ -279,7 +279,9 @@ impl<'a> Parser<'a> {
         }
 
         while !self.at_end() {
-            if self.previous().unwrap().token_type == TokenType::Semicolon {
+            if self.previous().is_none()
+                || self.previous().unwrap().token_type == TokenType::Semicolon
+            {
                 return;
             }
 
@@ -518,7 +520,10 @@ impl<'a> Parser<'a> {
             let method = self.previous().unwrap().lexeme.to_string();
             return Ok(Box::new(ast::Expr::super_expr(self.line(), method)));
         }
-        Err(self.error("expected expression".to_string()))
+        Err(self.error(format!(
+            "Error at '{}': Expect expression.",
+            self.peek().unwrap().lexeme
+        )))
     }
 
     // statement → exprStmt
