@@ -439,8 +439,7 @@ impl<'a> Parser<'a> {
         loop {
             if self.matches(&[TokenType::LeftParen])? {
                 expr = self.finish_call(expr)?;
-            }
-            if self.matches(&[TokenType::Dot])? {
+            } else if self.matches(&[TokenType::Dot])? {
                 self.consume(TokenType::Identifier, "Expect property name after '.'.")?;
                 let name = self.previous().unwrap().lexeme.to_string();
                 expr = Box::new(ast::Expr::get(self.line(), expr, name));
@@ -957,6 +956,26 @@ mod tests {
                     Box::new(ast::Expr::literal_bool(0, true)),
                 ],
             ))
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn multiple_call_statement() -> Result<(), error::ParseError> {
+        let stmts = parse("getCallback()();").map_err(|v| v.first().unwrap().clone())?;
+
+        assert_eq!(
+            stmts,
+            vec![Box::new(ast::Stmt::Expr(Box::new(ast::Expr::call(
+                0,
+                Box::new(ast::Expr::call(
+                    0,
+                    Box::new(ast::Expr::variable(0, "getCallback".to_string())),
+                    vec![],
+                )),
+                vec![]
+            ))))]
         );
 
         Ok(())
