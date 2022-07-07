@@ -356,108 +356,67 @@ FAIL test/string/error_after_multiline.lox
 Passed: 143 Failed: 28 Skipped: 15 (test/string/literals.lox)
 Passed: 144 Failed: 28 Skipped: 15 (test/string/multiline.lox)
 Passed: 145 Failed: 28 Skipped: 15 (test/string/unterminated.lox)
-FAIL test/string/unterminated.lox
-     Unexpected output on stderr:
-     [line 2] Unterminated string.
-     Missing expected error: [2] Error: Unterminated string.
-
-
-Passed: 145 Failed: 29 Skipped: 15 (test/precedence.lox)
-Passed: 146 Failed: 29 Skipped: 15 (test/regression/40.lox)
-Passed: 147 Failed: 29 Skipped: 15 (test/regression/394.lox)
-Passed: 148 Failed: 29 Skipped: 15 (test/while/return_closure.lox)
-Passed: 149 Failed: 29 Skipped: 15 (test/while/var_in_body.lox)
-Passed: 150 Failed: 29 Skipped: 15 (test/while/syntax.lox)
-Passed: 151 Failed: 29 Skipped: 15 (test/while/return_inside.lox)
-Passed: 152 Failed: 29 Skipped: 15 (test/while/closure_in_body.lox)
-Passed: 153 Failed: 29 Skipped: 15 (test/while/class_in_body.lox)
-Passed: 154 Failed: 29 Skipped: 15 (test/while/fun_in_body.lox)
-Passed: 155 Failed: 29 Skipped: 15 (test/method/empty_block.lox)
-Passed: 156 Failed: 29 Skipped: 15 (test/method/arity.lox)
-Passed: 157 Failed: 29 Skipped: 15 (test/method/refer_to_name.lox)
+Passed: 146 Failed: 28 Skipped: 15 (test/precedence.lox)
+Passed: 147 Failed: 28 Skipped: 15 (test/regression/40.lox)
+Passed: 148 Failed: 28 Skipped: 15 (test/regression/394.lox)
+Passed: 149 Failed: 28 Skipped: 15 (test/while/return_closure.lox)
+Passed: 150 Failed: 28 Skipped: 15 (test/while/var_in_body.lox)
+Passed: 151 Failed: 28 Skipped: 15 (test/while/syntax.lox)
+Passed: 152 Failed: 28 Skipped: 15 (test/while/return_inside.lox)
+Passed: 153 Failed: 28 Skipped: 15 (test/while/closure_in_body.lox)
+Passed: 154 Failed: 28 Skipped: 15 (test/while/class_in_body.lox)
+Passed: 155 Failed: 28 Skipped: 15 (test/while/fun_in_body.lox)
+Passed: 156 Failed: 28 Skipped: 15 (test/method/empty_block.lox)
+Passed: 157 Failed: 28 Skipped: 15 (test/method/arity.lox)
+Passed: 158 Failed: 28 Skipped: 15 (test/method/refer_to_name.lox)
 FAIL test/method/refer_to_name.lox
      Expected runtime error on line 3 but was on line 999.
 
 
-Passed: 157 Failed: 30 Skipped: 15 (test/method/too_many_arguments.lox)
-Passed: 158 Failed: 30 Skipped: 15 (test/method/print_bound_method.lox)
-Passed: 159 Failed: 30 Skipped: 15 (test/method/missing_arguments.lox)
-Passed: 160 Failed: 30 Skipped: 15 (test/method/not_found.lox)
+Passed: 158 Failed: 29 Skipped: 15 (test/method/too_many_arguments.lox)
+Passed: 159 Failed: 29 Skipped: 15 (test/method/print_bound_method.lox)
+Passed: 160 Failed: 29 Skipped: 15 (test/method/missing_arguments.lox)
+Passed: 161 Failed: 29 Skipped: 15 (test/method/not_found.lox)
 FAIL test/method/not_found.lox
      Expected runtime error on line 3 but was on line 999.
 
 
-Passed: 160 Failed: 31 Skipped: 15 (test/method/too_many_parameters.lox)
-Passed: 161 Failed: 31 Skipped: 15 (test/method/extra_arguments.lox)
-Passed: 162 Failed: 31 Skipped: 15 (test/operator/add_num_nil.lox)
-FAIL test/operator/add_num_nil.lox
-     Expected runtime error 'Operands must be two numbers or two strings.' and got:
-     type mismatch for operator +, number and Nil
-
-
-Passed: 162 Failed: 32 Skipped: 15 (test/operator/equals_method.lox)
-Passed: 163 Failed: 32 Skipped: 15 (test/operator/equals_class.lox)
-Passed: 164 Failed: 32 Skipped: 15 (test/operator/subtract_num_nonnum.lox)
-Passed: 165 Failed: 32 Skipped: 15 (test/operator/multiply.lox)
-Passed: 166 Failed: 32 Skipped: 15 (test/operator/negate.lox)
-Passed: 167 Failed: 32 Skipped: 15 (test/operator/divide_nonnum_num.lox)
-Passed: 168 Failed: 32 Skipped: 15 (test/operator/comparison.lox)
-Passed: 169 Failed: 32 Skipped: 15 (test/operator/greater_num_nonnum.lox)
-Passed: 170 Failed: 32 Skipped: 15 (test/operator/less_or_equal_nonnum_num.lox)
-Passed: 171 Failed: 32 Skipped: 15 (test/operator/multiply_nonnum_num.lox)
-Passed: 172 Failed: 32 Skipped: 15 (test/operator/not_equals.lox)
-Passed: 173 Failed: 32 Skipped: 15 (test/operator/add_bool_num.lox)
-FAIL test/operator/add_bool_num.lox
-     Expected runtime error 'Operands must be two numbers or two strings.' and got:
-     unsupported type for operator + Bool(true)
-
-
-Passed: 173 Failed: 33 Skipped: 15 (test/operator/negate_nonnum.lox)
-FAIL test/operator/negate_nonnum.lox
-     Expected runtime error 'Operand must be a number.' and got:
-     unary - must be applied to a number
-
-
-Passed: 173 Failed: 34 Skipped: 15 (test/operator/add.lox)
-Passed: 174 Failed: 34 Skipped: 15 (test/operator/greater_or_equal_nonnum_num.lox)
-Passed: 175 Failed: 34 Skipped: 15 (test/operator/equals.lox)
-Passed: 176 Failed: 34 Skipped: 15 (test/operator/less_nonnum_num.lox)
-Passed: 177 Failed: 34 Skipped: 15 (test/operator/add_bool_string.lox)
-FAIL test/operator/add_bool_string.lox
-     Expected runtime error 'Operands must be two numbers or two strings.' and got:
-     unsupported type for operator + Bool(true)
-
-
-Passed: 177 Failed: 35 Skipped: 15 (test/operator/divide.lox)
-Passed: 178 Failed: 35 Skipped: 15 (test/operator/add_string_nil.lox)
-FAIL test/operator/add_string_nil.lox
-     Expected runtime error 'Operands must be two numbers or two strings.' and got:
-     type mismatch for operator +, string and Nil
-
-
-Passed: 178 Failed: 36 Skipped: 15 (test/operator/add_bool_nil.lox)
-FAIL test/operator/add_bool_nil.lox
-     Expected runtime error 'Operands must be two numbers or two strings.' and got:
-     unsupported type for operator + Bool(true)
-
-
-Passed: 178 Failed: 37 Skipped: 15 (test/operator/divide_num_nonnum.lox)
-Passed: 179 Failed: 37 Skipped: 15 (test/operator/multiply_num_nonnum.lox)
-Passed: 180 Failed: 37 Skipped: 15 (test/operator/less_or_equal_num_nonnum.lox)
-Passed: 181 Failed: 37 Skipped: 15 (test/operator/greater_nonnum_num.lox)
-Passed: 182 Failed: 37 Skipped: 15 (test/operator/not.lox)
-Passed: 183 Failed: 37 Skipped: 15 (test/operator/add_nil_nil.lox)
-FAIL test/operator/add_nil_nil.lox
-     Expected runtime error 'Operands must be two numbers or two strings.' and got:
-     unsupported type for operator + Nil
-
-
-Passed: 183 Failed: 38 Skipped: 15 (test/operator/subtract.lox)
-Passed: 184 Failed: 38 Skipped: 15 (test/operator/subtract_nonnum_num.lox)
-Passed: 185 Failed: 38 Skipped: 15 (test/operator/not_class.lox)
-Passed: 186 Failed: 38 Skipped: 15 (test/operator/greater_or_equal_num_nonnum.lox)
-Passed: 187 Failed: 38 Skipped: 15 (test/operator/less_num_nonnum.lox)
-Passed: 188 Failed: 38 Skipped: 15 (test/constructor/call_init_explicitly.lox)
+Passed: 161 Failed: 30 Skipped: 15 (test/method/too_many_parameters.lox)
+Passed: 162 Failed: 30 Skipped: 15 (test/method/extra_arguments.lox)
+Passed: 163 Failed: 30 Skipped: 15 (test/operator/add_num_nil.lox)
+Passed: 164 Failed: 30 Skipped: 15 (test/operator/equals_method.lox)
+Passed: 165 Failed: 30 Skipped: 15 (test/operator/equals_class.lox)
+Passed: 166 Failed: 30 Skipped: 15 (test/operator/subtract_num_nonnum.lox)
+Passed: 167 Failed: 30 Skipped: 15 (test/operator/multiply.lox)
+Passed: 168 Failed: 30 Skipped: 15 (test/operator/negate.lox)
+Passed: 169 Failed: 30 Skipped: 15 (test/operator/divide_nonnum_num.lox)
+Passed: 170 Failed: 30 Skipped: 15 (test/operator/comparison.lox)
+Passed: 171 Failed: 30 Skipped: 15 (test/operator/greater_num_nonnum.lox)
+Passed: 172 Failed: 30 Skipped: 15 (test/operator/less_or_equal_nonnum_num.lox)
+Passed: 173 Failed: 30 Skipped: 15 (test/operator/multiply_nonnum_num.lox)
+Passed: 174 Failed: 30 Skipped: 15 (test/operator/not_equals.lox)
+Passed: 175 Failed: 30 Skipped: 15 (test/operator/add_bool_num.lox)
+Passed: 176 Failed: 30 Skipped: 15 (test/operator/negate_nonnum.lox)
+Passed: 177 Failed: 30 Skipped: 15 (test/operator/add.lox)
+Passed: 178 Failed: 30 Skipped: 15 (test/operator/greater_or_equal_nonnum_num.lox)
+Passed: 179 Failed: 30 Skipped: 15 (test/operator/equals.lox)
+Passed: 180 Failed: 30 Skipped: 15 (test/operator/less_nonnum_num.lox)
+Passed: 181 Failed: 30 Skipped: 15 (test/operator/add_bool_string.lox)
+Passed: 182 Failed: 30 Skipped: 15 (test/operator/divide.lox)
+Passed: 183 Failed: 30 Skipped: 15 (test/operator/add_string_nil.lox)
+Passed: 184 Failed: 30 Skipped: 15 (test/operator/add_bool_nil.lox)
+Passed: 185 Failed: 30 Skipped: 15 (test/operator/divide_num_nonnum.lox)
+Passed: 186 Failed: 30 Skipped: 15 (test/operator/multiply_num_nonnum.lox)
+Passed: 187 Failed: 30 Skipped: 15 (test/operator/less_or_equal_num_nonnum.lox)
+Passed: 188 Failed: 30 Skipped: 15 (test/operator/greater_nonnum_num.lox)
+Passed: 189 Failed: 30 Skipped: 15 (test/operator/not.lox)
+Passed: 190 Failed: 30 Skipped: 15 (test/operator/add_nil_nil.lox)
+Passed: 191 Failed: 30 Skipped: 15 (test/operator/subtract.lox)
+Passed: 192 Failed: 30 Skipped: 15 (test/operator/subtract_nonnum_num.lox)
+Passed: 193 Failed: 30 Skipped: 15 (test/operator/not_class.lox)
+Passed: 194 Failed: 30 Skipped: 15 (test/operator/greater_or_equal_num_nonnum.lox)
+Passed: 195 Failed: 30 Skipped: 15 (test/operator/less_num_nonnum.lox)
+Passed: 196 Failed: 30 Skipped: 15 (test/constructor/call_init_explicitly.lox)
 FAIL test/constructor/call_init_explicitly.lox
      Unexpected output on stderr:
      Undefined variable 'this'.
@@ -474,16 +433,16 @@ FAIL test/constructor/call_init_explicitly.lox
      Missing expected output 'init' on line 15.
 
 
-Passed: 188 Failed: 39 Skipped: 15 (test/constructor/return_value.lox)
+Passed: 196 Failed: 31 Skipped: 15 (test/constructor/return_value.lox)
 FAIL test/constructor/return_value.lox
      Missing expected error: [3] Error at 'return': Can't return a value from an initializer.
      Expected return code 65 and got 0. Stderr:
 
 
-Passed: 188 Failed: 40 Skipped: 15 (test/constructor/init_not_method.lox)
-Passed: 189 Failed: 40 Skipped: 15 (test/constructor/missing_arguments.lox)
-Passed: 190 Failed: 40 Skipped: 15 (test/constructor/default.lox)
-Passed: 191 Failed: 40 Skipped: 15 (test/constructor/arguments.lox)
+Passed: 196 Failed: 32 Skipped: 15 (test/constructor/init_not_method.lox)
+Passed: 197 Failed: 32 Skipped: 15 (test/constructor/missing_arguments.lox)
+Passed: 198 Failed: 32 Skipped: 15 (test/constructor/default.lox)
+Passed: 199 Failed: 32 Skipped: 15 (test/constructor/arguments.lox)
 FAIL test/constructor/arguments.lox
      Unexpected output on stderr:
      Undefined variable 'this'.
@@ -499,8 +458,8 @@ FAIL test/constructor/arguments.lox
      Missing expected output '2' on line 11.
 
 
-Passed: 191 Failed: 41 Skipped: 15 (test/constructor/default_arguments.lox)
-Passed: 192 Failed: 41 Skipped: 15 (test/constructor/call_init_early_return.lox)
+Passed: 199 Failed: 33 Skipped: 15 (test/constructor/default_arguments.lox)
+Passed: 200 Failed: 33 Skipped: 15 (test/constructor/call_init_early_return.lox)
 FAIL test/constructor/call_init_early_return.lox
      Unexpected output on stderr:
      Undefined variable 'this'.
@@ -516,8 +475,8 @@ FAIL test/constructor/call_init_early_return.lox
      Missing expected output 'Foo instance' on line 11.
 
 
-Passed: 192 Failed: 42 Skipped: 15 (test/constructor/extra_arguments.lox)
-Passed: 193 Failed: 42 Skipped: 15 (test/constructor/return_in_nested_function.lox)
+Passed: 200 Failed: 34 Skipped: 15 (test/constructor/extra_arguments.lox)
+Passed: 201 Failed: 34 Skipped: 15 (test/constructor/return_in_nested_function.lox)
 FAIL test/constructor/return_in_nested_function.lox
      Unexpected error:
      [line 0] Error at 'return': Can't return a value from an initializer.
@@ -528,7 +487,7 @@ FAIL test/constructor/return_in_nested_function.lox
      Missing expected output 'Foo instance' on line 10.
 
 
-Passed: 193 Failed: 43 Skipped: 15 (test/constructor/early_return.lox)
+Passed: 201 Failed: 35 Skipped: 15 (test/constructor/early_return.lox)
 FAIL test/constructor/early_return.lox
      Unexpected output on stderr:
      Undefined variable 'this'.
@@ -543,6 +502,6 @@ FAIL test/constructor/early_return.lox
      Missing expected output 'Foo instance' on line 10.
 
 
-Passed: 193 Failed: 44 Skipped: 15 (test/block/empty.lox)
-Passed: 194 Failed: 44 Skipped: 15 (test/block/scope.lox)
-195 tests passed. 44 tests failed.
+Passed: 201 Failed: 36 Skipped: 15 (test/block/empty.lox)
+Passed: 202 Failed: 36 Skipped: 15 (test/block/scope.lox)
+203 tests passed. 36 tests failed.

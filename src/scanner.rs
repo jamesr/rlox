@@ -209,7 +209,7 @@ impl<'a> Scanner<'a> {
         self.loc.advance_lines(lines);
 
         if self.at_end() {
-            return Err(self.error("Unterminated string.".to_string()));
+            return Err(self.error("Error: Unterminated string.".to_string()));
         }
         self.advance(); // Consume closing "
 

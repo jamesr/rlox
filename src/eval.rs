@@ -343,28 +343,16 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
             Plus => match left {
                 Value::Number(left_number) => match right {
                     Value::Number(right_number) => Ok(Value::Number(left_number + right_number)),
-                    _ => Err((
-                        format!("type mismatch for operator +, number and {:?}", right),
-                        e.line(),
-                    )
-                        .into()),
+                    _ => Err(("Operands must be two numbers or two strings.", e.line()).into()),
                 },
 
                 Value::String(left_string) => match right {
                     Value::String(right_string) => Ok(Value::String(left_string + &right_string)),
 
-                    _ => Err((
-                        format!("type mismatch for operator +, string and {:?}", right),
-                        e.line(),
-                    )
-                        .into()),
+                    _ => Err(("Operands must be two numbers or two strings.", e.line()).into()),
                 },
 
-                _ => Err((
-                    format!("unsupported type for operator + {:?}", left),
-                    e.line(),
-                )
-                    .into()),
+                _ => Err(("Operands must be two numbers or two strings.", e.line()).into()),
             },
             Greater => Ok(Value::Bool(
                 as_number(&left, e.line())? > as_number(&right, e.line())?,
@@ -395,7 +383,7 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
         match e.operator {
             Minus => match val {
                 Value::Number(n) => Ok(Value::Number(-n)),
-                _ => Err(("unary - must be applied to a number", e.line()).into()),
+                _ => Err(("Operand must be a number.", e.line()).into()),
             },
             Bang => Ok(Value::Bool(!truthy(&val))),
             _ => Err(("unsupported unary operator", e.line()).into()),
