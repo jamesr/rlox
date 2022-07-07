@@ -47,6 +47,10 @@ impl Env {
         }
     }
 
+    pub fn values(&self) -> &Values {
+        &self.values
+    }
+
     pub fn define(&mut self, name: String, value: eval::Value) {
         self.values.insert(name, value);
     }

@@ -88,8 +88,14 @@ impl eval::Callable for Callable {
         let instance = Value::Instance(Rc::new(RefCell::new(Instance::new(self.class.clone()))));
 
         if let Some(initializer) = self.class.methods.get("init") {
-            initializer.bind(instance.clone());
-            initializer.call(interpreter, args)?;
+            if let Value::Callable(bound_initializer) = initializer.bind(instance.clone()) {
+                bound_initializer.call(interpreter, args)?;
+            } else {
+                return Err(RuntimeError::new(
+                    format!("Failed to bind initializer for '{}'.", &self.class.name),
+                    999,
+                ));
+            }
         }
 
         Ok(instance)

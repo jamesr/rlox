@@ -309,17 +309,11 @@ impl visitor::Visitor<ResolverResult, ResolverResult> for Resolver<'_> {
 
             self.begin_scope();
 
-            self.scopes
-                .last_mut()
-                .unwrap()
-                .insert("super".to_string(), VariableState::Defined);
+            self.define("super".to_string());
         }
 
         self.begin_scope();
-        self.scopes
-            .last_mut()
-            .unwrap()
-            .insert("this".to_string(), VariableState::Defined);
+        self.define("this".to_string());
 
         for method in &c.methods {
             self.resolve_function(&method, FunctionType::Method)?;
