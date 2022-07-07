@@ -86,4 +86,8 @@ impl eval::Callable for Function {
     fn arity(&self) -> usize {
         self.decl.params.len()
     }
+
+    fn display_name(&self) -> String {
+        format!("<fn {}>", &self.decl.name)
+    }
 }

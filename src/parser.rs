@@ -59,7 +59,7 @@ impl<'a> Parser<'a> {
             TokenType::LessEqual => Ok(ast::Operator::LessEqual),
             TokenType::And => Ok(ast::Operator::And),
             TokenType::Or => Ok(ast::Operator::Or),
-            _ => Err(self.error(format!("Expected operator found '{}'.", token.lexeme))),
+            _ => Err(self.error(&format!("Expected operator found '{}'.", token.lexeme))),
         }
     }
     pub fn parse(&mut self) -> ParseResult {
@@ -164,7 +164,7 @@ impl<'a> Parser<'a> {
         if !self.check(TokenType::RightParen) {
             loop {
                 if params.len() >= 255 {
-                    return Err(self.error("Can't have more than 255 parameters.".to_string()));
+                    return Err(self.error("Can't have more than 255 parameters."));
                 }
 
                 self.consume(TokenType::Identifier, "Expect parameter name.")?;
@@ -232,8 +232,15 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn error(&self, message: String) -> error::ParseError {
-        self.state.borrow().scanner.error(message)
+    fn error(&self, message: &str) -> error::ParseError {
+        let peeked = match self.peek() {
+            Some(token) => format!("'{}'", token.lexeme),
+            None => "end".to_string(),
+        };
+        self.state
+            .borrow()
+            .scanner
+            .error(format!("Error at {}: {}", peeked, message))
     }
 
     fn add_error(&self, e: error::ParseError) {
@@ -265,12 +272,7 @@ impl<'a> Parser<'a> {
         if self.check(token_type) {
             return self.advance();
         }
-        Err(self.error(format!(
-            "[line {}] Error at '{}': {}",
-            self.state.borrow().scanner.line(),
-            self.peek().unwrap().lexeme,
-            message,
-        )))
+        Err(self.error(message))
     }
 
     fn synchronize(&self) {
@@ -457,7 +459,7 @@ impl<'a> Parser<'a> {
         if !self.check(TokenType::RightParen) {
             loop {
                 if args.len() >= 255 {
-                    self.add_error(self.error("Can't have more than 255 arguments".to_string()));
+                    self.add_error(self.error("Can't have more than 255 arguments"));
                 }
                 args.push(self.expression()?);
                 if !self.matches(&[TokenType::Comma])? {
@@ -520,10 +522,7 @@ impl<'a> Parser<'a> {
             let method = self.previous().unwrap().lexeme.to_string();
             return Ok(Box::new(ast::Expr::super_expr(self.line(), method)));
         }
-        Err(self.error(format!(
-            "Error at '{}': Expect expression.",
-            self.peek().unwrap().lexeme
-        )))
+        Err(self.error("Expect expression."))
     }
 
     // statement → exprStmt

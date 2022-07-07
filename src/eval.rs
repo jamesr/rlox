@@ -13,6 +13,8 @@ pub trait Callable: std::fmt::Debug {
     fn call(&self, interpreter: &mut Interpreter, args: Vec<Value>) -> Result<Value, RuntimeError>;
 
     fn arity(&self) -> usize;
+
+    fn display_name(&self) -> String;
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -32,7 +34,7 @@ impl Display for Value {
             Value::String(s) => write!(f, "{}", s),
             Value::Number(n) => write!(f, "{}", n),
             Value::Bool(b) => write!(f, "{}", b),
-            Value::Callable(_) => write!(f, "<fn>"),
+            Value::Callable(c) => write!(f, "{}", c.display_name()),
             Value::Class(c) => write!(f, "{}", &c.class.name),
             Value::Instance(i) => {
                 write!(f, "{} instance", &RefCell::borrow(&*i).class.name)
@@ -137,7 +139,12 @@ impl Interpreter {
         env_ref.get(name)
     }
 
-    fn assign_variable(&mut self, name: &String, value: Value, expr_id: u64) {
+    fn assign_variable(
+        &mut self,
+        name: &String,
+        value: Value,
+        expr_id: u64,
+    ) -> Result<(), error::RuntimeError> {
         let env = match self.locals.get(&expr_id) {
             Some(depth) => env::ancestor(&self.env, *depth),
             None => Some(self.globals.clone()),
@@ -146,7 +153,7 @@ impl Interpreter {
 
         let mut env_ref = env.borrow_mut();
 
-        env_ref.assign(name.clone(), value).unwrap();
+        env_ref.assign(name.clone(), value)
     }
 }
 
@@ -173,6 +180,9 @@ impl Callable for Clock {
     }
     fn arity(&self) -> usize {
         0
+    }
+    fn display_name(&self) -> String {
+        "<native fn>".to_string()
     }
 }
 
@@ -226,7 +236,7 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
             Value::Class(c) => (*c).clone() as Rc<dyn Callable>,
             _ => {
                 return Err(error::RuntimeError::new(
-                    "Can only call functions.".to_string(),
+                    "Can only call functions and classes.".to_string(),
                     c.line(),
                 ))
             }
@@ -398,7 +408,7 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
 
     fn visit_assign(&mut self, a: &ast::AssignExpr) -> ExprResult {
         let value = self.visit_expr(&*a.value)?;
-        self.assign_variable(&a.name, value.clone(), a.id());
+        self.assign_variable(&a.name, value.clone(), a.id())?;
         Ok(value)
     }
 

@@ -141,8 +141,15 @@ impl visitor::Visitor<ResolverResult, ResolverResult> for Resolver<'_> {
     fn visit_variable(&mut self, v: &ast::VariableExpr) -> ResolverResult {
         if let Some(scope) = self.scopes.last() {
             if scope.get(&v.name) == Some(&VariableState::Declared) {
-                return Err(error::ParseError::with_message(
-                    "Can't read local variable in its own initializer.",
+                return Err(error::ParseError::new(
+                    format!(
+                        "Error at '{}': Can't read local variable in its own initializer.",
+                        &v.name
+                    ),
+                    error::Location {
+                        line: v.line(),
+                        col: 0..0,
+                    },
                 )
                 .into());
             }
@@ -185,13 +192,14 @@ impl visitor::Visitor<ResolverResult, ResolverResult> for Resolver<'_> {
 
     fn visit_super(&mut self, s: &ast::SuperExpr) -> ResolverResult {
         if self.current_class == ClassType::None {
-            return Err(
-                error::ParseError::with_message("Can't use 'super' outside of a class.").into(),
-            );
+            return Err(error::ParseError::with_message(
+                "Error at 'super': Can't use 'super' outside of a class.",
+            )
+            .into());
         }
         if self.current_class != ClassType::Subclass {
             return Err(error::ParseError::with_message(
-                "Can't use 'super' in a class with no subclass.",
+                "Error at 'super': Can't use 'super' in a class with no subclass.",
             )
             .into());
         }
@@ -201,9 +209,10 @@ impl visitor::Visitor<ResolverResult, ResolverResult> for Resolver<'_> {
 
     fn visit_this(&mut self, t: &ast::ThisExpr) -> ResolverResult {
         if self.current_class != ClassType::Class {
-            return Err(
-                error::ParseError::with_message("Can't use 'this' outside of a class.").into(),
-            );
+            return Err(error::ParseError::with_message(
+                "Error at 'this': Can't use 'this' outside of a class.",
+            )
+            .into());
         }
         self.resolve_local(&"this".to_string(), t.id());
         Ok(())
@@ -225,14 +234,15 @@ impl visitor::Visitor<ResolverResult, ResolverResult> for Resolver<'_> {
 
     fn visit_return_stmt(&mut self, r: &Option<Box<ast::Expr>>) -> ResolverResult {
         if self.current_function == FunctionType::None {
-            return Err(
-                error::ParseError::with_message("Can't return from top-level code.").into(),
-            );
+            return Err(error::ParseError::with_message(
+                "Error at 'return': Can't return from top-level code.",
+            )
+            .into());
         }
         if let Some(e) = r {
             if self.current_function == FunctionType::Initializer {
                 return Err(error::ParseError::with_message(
-                    "Can't return a value from an initializer.",
+                    "Error at 'return': Can't return a value from an initializer.",
                 )
                 .into());
             }
@@ -288,9 +298,10 @@ impl visitor::Visitor<ResolverResult, ResolverResult> for Resolver<'_> {
             self.current_class = ClassType::Subclass;
             if let ast::Expr::Variable(v) = &**superclass {
                 if v.name == c.name {
-                    return Err(error::ParseError::with_message(
-                        "A class can't inherit from itself.",
-                    )
+                    return Err(error::ParseError::with_message(&format!(
+                        "Error at '{}': A class can't inherit from itself.",
+                        &v.name
+                    ))
                     .into());
                 }
             }

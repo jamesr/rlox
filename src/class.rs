@@ -101,4 +101,8 @@ impl eval::Callable for Callable {
             None => 0,
         }
     }
+
+    fn display_name(&self) -> String {
+        format!("<fn {}>", &self.class.name)
+    }
 }
