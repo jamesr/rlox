@@ -10,7 +10,12 @@ use crate::{
 };
 
 pub trait Callable: std::fmt::Debug {
-    fn call(&self, interpreter: &mut Interpreter, args: Vec<Value>) -> Result<Value, RuntimeError>;
+    fn call(
+        &self,
+        interpreter: &mut Interpreter,
+        args: Vec<Value>,
+        loc: error::Location,
+    ) -> Result<Value, RuntimeError>;
 
     fn arity(&self) -> usize;
 
@@ -86,8 +91,15 @@ impl Interpreter {
         Ok(())
     }
 
-    pub fn interpret_expr(&mut self, e: &ast::Expr) -> ExprResult {
-        self.visit_expr(e)
+    pub fn interpret_expr(
+        &mut self,
+        e: &ast::Expr,
+        location_table: parser::LocationTable,
+    ) -> ExprResult {
+        self.location_table = Some(location_table);
+        let result = self.visit_expr(e);
+        self.location_table = None;
+        result
     }
 
     pub fn has_error(&self) -> bool {
@@ -135,18 +147,11 @@ impl Interpreter {
         self.locals.insert(expr_id, depth);
     }
 
-    fn expr_loc(&self, expr_id: u64) -> error::Location {
-        self.location_table
-            .as_ref()
-            .unwrap()
-            .get(&expr_id)
-            .unwrap()
-            .clone()
-    }
-
-    fn stmt_loc(&self, _: u64) -> error::Location {
-        //*self.location_table.unwrap().get(&expr_id).unwrap()
-        error::Location::default()
+    fn ast_loc(&self, ast_id: u64) -> error::Location {
+        match self.location_table.as_ref().unwrap().get(&ast_id) {
+            Some(loc) => loc.clone(),
+            None => error::Location::default(),
+        }
     }
 
     fn lookup_variable(&mut self, name: &String, expr_id: u64) -> ExprResult {
@@ -158,7 +163,7 @@ impl Interpreter {
 
         let env_ref = RefCell::borrow(&*env);
 
-        env_ref.get(name)
+        env_ref.get(name, self.ast_loc(expr_id))
     }
 
     fn assign_variable(
@@ -175,7 +180,7 @@ impl Interpreter {
 
         let mut env_ref = env.borrow_mut();
 
-        env_ref.assign(name.clone(), value)
+        env_ref.assign(name.clone(), value, self.ast_loc(expr_id))
     }
 }
 
@@ -197,6 +202,7 @@ impl Callable for Clock {
         &self,
         _interpreter: &mut Interpreter,
         _args: Vec<Value>,
+        _loc: error::Location,
     ) -> Result<Value, RuntimeError> {
         Ok(Value::Number(self.start.elapsed().as_secs_f64()))
     }
@@ -262,7 +268,7 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
             _ => {
                 return Err(error::RuntimeError::new(
                     "Can only call functions and classes.".to_string(),
-                    self.expr_loc(c.id()),
+                    self.ast_loc(c.id()),
                 ))
             }
         };
@@ -274,11 +280,11 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
                     callable.arity(),
                     args.len()
                 ),
-                self.expr_loc(c.id()),
+                self.ast_loc(c.id()),
             ));
         }
 
-        return Ok(callable.call(self, args)?);
+        return Ok(callable.call(self, args, self.ast_loc(c.id()))?);
     }
 
     fn visit_set(&mut self, s: &ast::SetExpr) -> ExprResult {
@@ -291,19 +297,19 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
 
         Err(error::RuntimeError::new(
             "Only instances have fields.".to_string(),
-            self.expr_loc(s.id()),
+            self.ast_loc(s.id()),
         ))
     }
 
     fn visit_get(&mut self, g: &ast::GetExpr) -> ExprResult {
         let object = self.visit_expr(&g.object)?;
         if let Value::Instance(instance) = object.clone() {
-            return RefCell::borrow(&*instance).get(&g.name, object);
+            return RefCell::borrow(&*instance).get(&g.name, object, self.ast_loc(g.id()));
         }
 
         Err(error::RuntimeError::new(
             "Only instances have properties.".to_string(),
-            self.expr_loc(g.id()),
+            self.ast_loc(g.id()),
         ))
     }
 
@@ -313,19 +319,19 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
             None => {
                 return Err(error::RuntimeError::new(
                     "'super' not found in locals".to_string(),
-                    self.expr_loc(s.id()),
+                    self.ast_loc(s.id()),
                 ));
             }
         };
         let superclass = env::ancestor(&self.env, distance)
             .unwrap()
             .borrow()
-            .get(&"super".to_string())?;
+            .get(&"super".to_string(), self.ast_loc(s.id()))?;
 
         let object = env::ancestor(&self.env, distance - 1)
             .unwrap()
             .borrow()
-            .get(&"this".to_string())?;
+            .get(&"this".to_string(), self.ast_loc(s.id()))?;
 
         if let Value::Class(superclass) = superclass {
             let method = match superclass.class.find_method(&s.name) {
@@ -333,7 +339,7 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
                 None => {
                     return Err(error::RuntimeError::new(
                         format!("Undefined property '{}'.", &s.name),
-                        self.expr_loc(s.id()),
+                        self.ast_loc(s.id()),
                     ));
                 }
             };
@@ -342,7 +348,7 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
 
         Err(error::RuntimeError::new(
             "'super' not a a class.".to_string(),
-            self.expr_loc(s.id()),
+            self.ast_loc(s.id()),
         ))
     }
 
@@ -357,23 +363,20 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
         use ast::Operator::*;
         match e.operator {
             Minus => Ok(Value::Number(
-                as_number(&left, self.expr_loc(e.id()))?
-                    - as_number(&right, self.expr_loc(e.id()))?,
+                as_number(&left, self.ast_loc(e.id()))? - as_number(&right, self.ast_loc(e.id()))?,
             )),
             Slash => Ok(Value::Number(
-                as_number(&left, self.expr_loc(e.id()))?
-                    / as_number(&right, self.expr_loc(e.id()))?,
+                as_number(&left, self.ast_loc(e.id()))? / as_number(&right, self.ast_loc(e.id()))?,
             )),
             Star => Ok(Value::Number(
-                as_number(&left, self.expr_loc(e.id()))?
-                    * as_number(&right, self.expr_loc(e.id()))?,
+                as_number(&left, self.ast_loc(e.id()))? * as_number(&right, self.ast_loc(e.id()))?,
             )),
             Plus => match left {
                 Value::Number(left_number) => match right {
                     Value::Number(right_number) => Ok(Value::Number(left_number + right_number)),
                     _ => Err((
                         "Operands must be two numbers or two strings.",
-                        self.expr_loc(e.id()),
+                        self.ast_loc(e.id()),
                     )
                         .into()),
                 },
@@ -383,39 +386,35 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
 
                     _ => Err((
                         "Operands must be two numbers or two strings.",
-                        self.expr_loc(e.id()),
+                        self.ast_loc(e.id()),
                     )
                         .into()),
                 },
 
                 _ => Err((
                     "Operands must be two numbers or two strings.",
-                    self.expr_loc(e.id()),
+                    self.ast_loc(e.id()),
                 )
                     .into()),
             },
             Greater => Ok(Value::Bool(
-                as_number(&left, self.expr_loc(e.id()))?
-                    > as_number(&right, self.expr_loc(e.id()))?,
+                as_number(&left, self.ast_loc(e.id()))? > as_number(&right, self.ast_loc(e.id()))?,
             )),
             GreaterEqual => Ok(Value::Bool(
-                as_number(&left, self.expr_loc(e.id()))?
-                    >= as_number(&right, self.expr_loc(e.id()))?,
+                as_number(&left, self.ast_loc(e.id()))? >= as_number(&right, self.ast_loc(e.id()))?,
             )),
             Less => Ok(Value::Bool(
-                as_number(&left, self.expr_loc(e.id()))?
-                    < as_number(&right, self.expr_loc(e.id()))?,
+                as_number(&left, self.ast_loc(e.id()))? < as_number(&right, self.ast_loc(e.id()))?,
             )),
             LessEqual => Ok(Value::Bool(
-                as_number(&left, self.expr_loc(e.id()))?
-                    <= as_number(&right, self.expr_loc(e.id()))?,
+                as_number(&left, self.ast_loc(e.id()))? <= as_number(&right, self.ast_loc(e.id()))?,
             )),
             BangEqual => Ok(Value::Bool(left != right)),
             EqualEqual => Ok(Value::Bool(left == right)),
 
             _ => Err((
                 format!("unknown operator {}", e.operator),
-                self.expr_loc(e.id()),
+                self.ast_loc(e.id()),
             )
                 .into()),
         }
@@ -431,10 +430,10 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
         match e.operator {
             Minus => match val {
                 Value::Number(n) => Ok(Value::Number(-n)),
-                _ => Err(("Operand must be a number.", self.expr_loc(e.id())).into()),
+                _ => Err(("Operand must be a number.", self.ast_loc(e.id())).into()),
             },
             Bang => Ok(Value::Bool(!truthy(&val))),
-            _ => Err(("unsupported unary operator", self.expr_loc(e.id())).into()),
+            _ => Err(("unsupported unary operator", self.ast_loc(e.id())).into()),
         }
     }
 
@@ -470,12 +469,12 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
     }
 
     fn visit_print_stmt(&mut self, e: &ast::Expr) -> StmtResult {
-        println!("{}", self.interpret_expr(e)?);
+        println!("{}", self.visit_expr(e)?);
         Ok(())
     }
 
-    fn visit_return_stmt(&mut self, r: &Option<Box<ast::Expr>>) -> StmtResult {
-        let value = match r {
+    fn visit_return_stmt(&mut self, r: &ast::ReturnStmt) -> StmtResult {
+        let value = match &r.value {
             Some(e) => self.visit_expr(e)?,
             None => Value::Nil,
         };
@@ -529,7 +528,7 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
             } else {
                 return Err(error::RuntimeError::new(
                     "Superclass must be a class.".to_string(),
-                    self.stmt_loc(0),
+                    self.ast_loc(c.id()),
                 ));
             }
         } else {
@@ -572,8 +571,11 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
             self.env = previous_env;
         }
 
-        self.env_mut()
-            .assign(c.name.clone(), Value::Class(class_callable))?;
+        self.env_mut().assign(
+            c.name.clone(),
+            Value::Class(class_callable),
+            self.ast_loc(c.id()),
+        )?;
 
         Ok(())
     }
@@ -597,7 +599,10 @@ mod tests {
                 let location_table = parser.take_location_table();
                 let mut resolver = resolver::Resolver::new(&mut interpreter, &location_table);
                 resolver.resolve_expr(&expr)?;
-                assert_eq!(interpreter.interpret_expr(&expr)?, $expected_value);
+                assert_eq!(
+                    interpreter.interpret_expr(&expr, location_table)?,
+                    $expected_value
+                );
                 Ok(())
             }
         };
@@ -647,10 +652,10 @@ mod tests {
                 let location_table = parser.take_location_table();
                 let mut resolver = resolver::Resolver::new(&mut interpreter, &location_table);
                 resolver.resolve(&stmts)?;
-                interpreter.interpret(&stmts, location_table)?;
+                interpreter.interpret(&stmts, location_table.clone())?;
 
                 let all_tests_passed_expr = crate::parser::parse_expression("all_tests_passed")?;
-                let result = interpreter.interpret_expr(&all_tests_passed_expr)?;
+                let result = interpreter.interpret_expr(&all_tests_passed_expr, location_table)?;
                 assert_eq!(result, Value::Bool(true));
                 Ok(())
             }

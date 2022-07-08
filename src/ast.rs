@@ -242,7 +242,17 @@ pub enum Stmt {
 
 impl Stmt {
     pub fn id(&self) -> u64 {
-        0
+        match self {
+            Stmt::Expr(s) => s.id(),
+            Stmt::Print(s) => s.id(),
+            Stmt::Return(s) => s.id(),
+            Stmt::Block(s) => s.id(),
+            Stmt::Var(s) => s.id(),
+            Stmt::If(s) => s.id(),
+            Stmt::While(s) => s.id(),
+            Stmt::Function(s) => s.id(),
+            Stmt::Class(s) => s.id(),
+        }
     }
 
     ast_node_constructor!(expr, Expr, Stmt, ExprStmt, expr: Box<Expr>);

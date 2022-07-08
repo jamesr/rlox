@@ -4,7 +4,7 @@ use by_address::ByAddress;
 
 use crate::{
     ast, env,
-    error::RuntimeError,
+    error::{self, RuntimeError},
     eval::{self, Value},
 };
 
@@ -49,6 +49,7 @@ impl eval::Callable for Function {
         &self,
         interpreter: &mut eval::Interpreter,
         args: Vec<eval::Value>,
+        loc: error::Location,
     ) -> Result<eval::Value, RuntimeError> {
         // Make environment
         let env = Rc::new(RefCell::new(env::Env::with_parent(self.closure.clone())));
@@ -64,7 +65,7 @@ impl eval::Callable for Function {
         let value = match result {
             Err(RuntimeError::Return(v)) => {
                 if self.initializer {
-                    self.closure.borrow().get(&"this".to_string())?
+                    self.closure.borrow().get(&"this".to_string(), loc)?
                 } else {
                     v
                 }
@@ -74,7 +75,7 @@ impl eval::Callable for Function {
             }
             _ => {
                 if self.initializer {
-                    self.closure.borrow().get(&"this".to_string())?
+                    self.closure.borrow().get(&"this".to_string(), loc)?
                 } else {
                     Value::Nil
                 }

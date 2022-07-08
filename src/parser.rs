@@ -24,14 +24,27 @@ type StmtResult = Result<Box<ast::Stmt>, error::ParseError>;
 type StmtsResult = Result<Vec<Box<ast::Stmt>>, error::ParseError>;
 type ParseResult = Result<Vec<Box<ast::Stmt>>, Vec<error::ParseError>>;
 
+macro_rules! make_ast_node {
+    ($name:ident, $ast_type:ident, $expr_type:ident, $($param:ident: $param_type:ty),*) => {
+        fn $name(&self, $($param: $param_type),*) -> Box<ast::$ast_type> {
+            let ast_node = Box::new(ast::$ast_type::$expr_type($($param),*));
+            let ast_node_loc = self.state.borrow().scanner.loc();
+            self.state.borrow_mut().loc.insert(ast_node.id(), ast_node_loc);
+            ast_node
+        }
+
+    };
+}
+
 macro_rules! make_expr {
     ($name:ident, $expr_type:ident, $($param:ident: $param_type:ty),*) => {
-        fn $name(&self, $($param: $param_type),*) -> Box<ast::Expr> {
-            let expr = Box::new(ast::Expr::$expr_type($($param),*));
-            let expr_loc = self.state.borrow().scanner.loc();
-            self.state.borrow_mut().loc.insert(expr.id(), expr_loc);
-            return expr;
-        }
+        make_ast_node!($name, Expr, $expr_type, $($param: $param_type),*);
+    };
+}
+
+macro_rules! make_stmt {
+    ($name:ident, $stmt_type:ident, $($param:ident: $param_type:ty),*) => {
+        make_ast_node!($name, Stmt, $stmt_type, $($param: $param_type),*);
     };
 }
 
@@ -180,6 +193,45 @@ impl<'a> Parser<'a> {
     make_expr!(make_this_expr, this,);
     make_expr!(make_get_expr, get, object: Box<ast::Expr>, name: String);
 
+    make_stmt!(make_expr_stmt, expr, expr: Box<ast::Expr>);
+    make_stmt!(make_print_stmt, print, expr: Box<ast::Expr>);
+    make_stmt!(make_return_stmt, return_stmt, value: Option<Box<ast::Expr>>);
+    make_stmt!(make_block_stmt, block, stmts: Vec<Box<ast::Stmt>>);
+    make_stmt!(
+        make_var_stmt,
+        var,
+        name: String,
+        initializer: Option<Box<ast::Expr>>
+    );
+    make_stmt!(
+        make_if_stmt,
+        if_stmt,
+        condition: Box<ast::Expr>,
+        then_branch: Box<ast::Stmt>,
+        else_branch: Option<Box<ast::Stmt>>
+    );
+    make_stmt!(
+        make_while_stmt,
+        while_stmt,
+        condition: Box<ast::Expr>,
+        body: Box<ast::Stmt>
+    );
+    fn make_function_stmt(&self, function: Rc<ast::FunctionStmt>) -> Box<ast::Stmt> {
+        let ast_node_loc = self.state.borrow().scanner.loc();
+        self.state
+            .borrow_mut()
+            .loc
+            .insert(function.id(), ast_node_loc);
+        Box::new(ast::Stmt::Function(function))
+    }
+    make_stmt!(
+        make_class_stmt,
+        class,
+        name: String,
+        superclass: Option<Box<ast::Expr>>,
+        methods: Vec<Rc<FunctionStmt>>
+    );
+
     //  classDecl → "class" IDENTIFIER ( "<" IDENTIFIER )? "{" function* "}" ;
     fn class_decl(&self) -> StmtResult {
         self.consume(TokenType::Identifier, "Expect class name.")?;
@@ -201,12 +253,12 @@ impl<'a> Parser<'a> {
 
         self.consume(TokenType::RightBrace, "Expect '}' after class body.")?;
 
-        Ok(Box::new(ast::Stmt::class(name, superclass, methods)))
+        Ok(self.make_class_stmt(name, superclass, methods))
     }
 
     // funDecl → "fun" function ;
     fn fun_decl(&self, kind: &str) -> StmtResult {
-        Ok(Box::new(ast::Stmt::Function(self.function(kind)?)))
+        Ok(self.make_function_stmt(self.function(kind)?))
     }
 
     // function → IDENTIFIER "(" parameters? ")" block ;
@@ -261,7 +313,7 @@ impl<'a> Parser<'a> {
             TokenType::Semicolon,
             "Expect ';' after variable declaration.",
         )?;
-        Ok(Box::new(ast::Stmt::var(name, initializer)))
+        Ok(self.make_var_stmt(name, initializer))
     }
 
     fn prime(&self) -> Result<(), error::ParseError> {
@@ -600,7 +652,7 @@ impl<'a> Parser<'a> {
             return self.while_stmt();
         }
         if self.matches(&[TokenType::LeftBrace])? {
-            return Ok(Box::new(ast::Stmt::block(self.block()?)));
+            return Ok(self.make_block_stmt(self.block()?));
         }
 
         self.expr_stmt()
@@ -623,14 +675,14 @@ impl<'a> Parser<'a> {
     fn expr_stmt(&self) -> StmtResult {
         let expr = self.expression()?;
         self.consume(TokenType::Semicolon, "Expect ';' after value.")?;
-        Ok(Box::new(ast::Stmt::expr(expr)))
+        Ok(self.make_expr_stmt(expr))
     }
 
     // printStmt → "print" expression ";"
     fn print_stmt(&self) -> StmtResult {
         let expr = self.expression()?;
         self.consume(TokenType::Semicolon, "Expect ';' after value.")?;
-        Ok(Box::new(ast::Stmt::print(expr)))
+        Ok(self.make_print_stmt(expr))
     }
 
     // returnStmt → "return" expression? ";" ;
@@ -642,7 +694,7 @@ impl<'a> Parser<'a> {
         };
 
         self.consume(TokenType::Semicolon, "Expect ';' after return value.")?;
-        Ok(Box::new(ast::Stmt::return_stmt(value)))
+        Ok(self.make_return_stmt(value))
     }
 
     // ifStmt → "if" "(" expression ")" statement
@@ -659,11 +711,7 @@ impl<'a> Parser<'a> {
             None
         };
 
-        Ok(Box::new(ast::Stmt::if_stmt(
-            condition,
-            then_branch,
-            else_branch,
-        )))
+        Ok(self.make_if_stmt(condition, then_branch, else_branch))
     }
 
     // whileStmt → "while" "(" expression ")" statement ;
@@ -676,7 +724,7 @@ impl<'a> Parser<'a> {
 
         let body = self.statement()?;
 
-        Ok(Box::new(ast::Stmt::while_stmt(condition, body)))
+        Ok(self.make_while_stmt(condition, body))
     }
 
     // forStmt → "for" "(" ( varDecl | exprStmt | ";" )
@@ -728,15 +776,13 @@ impl<'a> Parser<'a> {
 
         let mut while_block_stmts = vec![body];
         if let Some(increment_expr) = increment {
-            while_block_stmts.push(Box::new(ast::Stmt::expr(increment_expr)));
+            while_block_stmts.push(self.make_expr_stmt(increment_expr));
         }
 
-        outer_block_stmts.push(Box::new(ast::Stmt::while_stmt(
-            condition,
-            Box::new(ast::Stmt::block(while_block_stmts)),
-        )));
+        outer_block_stmts
+            .push(self.make_while_stmt(condition, self.make_block_stmt(while_block_stmts)));
 
-        Ok(Box::new(ast::Stmt::block(outer_block_stmts)))
+        Ok(self.make_block_stmt(outer_block_stmts))
     }
 }
 

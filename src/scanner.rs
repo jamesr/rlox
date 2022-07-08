@@ -109,7 +109,7 @@ impl Loc {
     }
 
     fn line(&self) -> usize {
-        self.lines.end
+        self.lines.start
     }
 }
 

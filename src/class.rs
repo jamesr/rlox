@@ -62,7 +62,12 @@ impl Instance {
         }
     }
 
-    pub fn get(&self, name: &str, this: Value) -> Result<Value, RuntimeError> {
+    pub fn get(
+        &self,
+        name: &str,
+        this: Value,
+        loc: error::Location,
+    ) -> Result<Value, RuntimeError> {
         if let Some(value) = self.fields.get(name) {
             return Ok(value.clone());
         }
@@ -73,7 +78,7 @@ impl Instance {
 
         Err(RuntimeError::new(
             format!("Undefined property '{}'.", name),
-            error::Location::default(),
+            loc,
         ))
     }
 
@@ -84,16 +89,21 @@ impl Instance {
 }
 
 impl eval::Callable for Callable {
-    fn call(&self, interpreter: &mut Interpreter, args: Vec<Value>) -> Result<Value, RuntimeError> {
+    fn call(
+        &self,
+        interpreter: &mut Interpreter,
+        args: Vec<Value>,
+        loc: error::Location,
+    ) -> Result<Value, RuntimeError> {
         let instance = Value::Instance(Rc::new(RefCell::new(Instance::new(self.class.clone()))));
 
         if let Some(initializer) = self.class.methods.get("init") {
             if let Value::Callable(bound_initializer) = initializer.bind(instance.clone()) {
-                bound_initializer.call(interpreter, args)?;
+                bound_initializer.call(interpreter, args, loc)?;
             } else {
                 return Err(RuntimeError::new(
                     format!("Failed to bind initializer for '{}'.", &self.class.name),
-                    error::Location::default(),
+                    loc,
                 ));
             }
         }

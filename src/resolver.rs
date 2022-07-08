@@ -108,7 +108,7 @@ impl<'a> Resolver<'a> {
         self.begin_scope();
 
         for p in &f.params {
-            self.declare(p.clone(), error::Location::default())?;
+            self.declare(p.clone(), self.ast_loc(f.id()))?;
             self.define(p.clone());
         }
 
@@ -244,14 +244,15 @@ impl visitor::Visitor<ResolverResult, ResolverResult> for Resolver<'_> {
         self.visit_expr(e)
     }
 
-    fn visit_return_stmt(&mut self, r: &Option<Box<ast::Expr>>) -> ResolverResult {
+    fn visit_return_stmt(&mut self, r: &ast::ReturnStmt) -> ResolverResult {
         if self.current_function == FunctionType::None {
-            return Err(error::ParseError::with_message(
+            return Err(error::ParseError::new(
                 "Error at 'return': Can't return from top-level code.",
+                self.ast_loc(r.id()),
             )
             .into());
         }
-        if let Some(e) = r {
+        if let Some(e) = &r.value {
             if self.current_function == FunctionType::Initializer {
                 return Err(error::ParseError::new(
                     "Error at 'return': Can't return a value from an initializer.",
@@ -265,7 +266,7 @@ impl visitor::Visitor<ResolverResult, ResolverResult> for Resolver<'_> {
     }
 
     fn visit_var_decl_stmt(&mut self, v: &ast::VarDecl) -> ResolverResult {
-        self.declare(v.name.clone(), error::Location::default())?;
+        self.declare(v.name.clone(), self.ast_loc(v.id()))?;
         if let Some(initializer) = &v.initializer {
             self.visit_expr(initializer)?;
         }
@@ -288,7 +289,7 @@ impl visitor::Visitor<ResolverResult, ResolverResult> for Resolver<'_> {
     }
 
     fn visit_function_stmt(&mut self, f: &std::rc::Rc<ast::FunctionStmt>) -> ResolverResult {
-        self.declare(f.name.clone(), error::Location::default())?;
+        self.declare(f.name.clone(), self.ast_loc(f.id()))?;
         self.define(f.name.clone());
 
         self.resolve_function(f, FunctionType::Function)?;
@@ -299,7 +300,7 @@ impl visitor::Visitor<ResolverResult, ResolverResult> for Resolver<'_> {
         let enclosing_class = self.current_class;
         self.current_class = ClassType::Class;
 
-        self.declare(c.name.clone(), error::Location::default())?;
+        self.declare(c.name.clone(), self.ast_loc(c.id()))?;
         self.define(c.name.clone());
 
         if let Some(superclass) = &c.superclass {
