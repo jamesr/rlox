@@ -1,15 +1,19 @@
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::ast::{ClassStmt, FunctionStmt, IfStmt, WhileStmt};
+use crate::ast::FunctionStmt;
 use crate::scanner::{Scanner, Token, TokenType, TokenValue};
 use crate::{ast, error};
+
+pub type LocationTable = HashMap<u64, error::Location>;
 
 struct ParserState<'a> {
     scanner: Scanner<'a>,
     current: Option<Token<'a>>,
     prev: Option<Token<'a>>,
     errors: Vec<error::ParseError>,
+    loc: LocationTable,
 }
 pub struct Parser<'a> {
     state: RefCell<ParserState<'a>>,
@@ -20,6 +24,17 @@ type StmtResult = Result<Box<ast::Stmt>, error::ParseError>;
 type StmtsResult = Result<Vec<Box<ast::Stmt>>, error::ParseError>;
 type ParseResult = Result<Vec<Box<ast::Stmt>>, Vec<error::ParseError>>;
 
+macro_rules! make_expr {
+    ($name:ident, $expr_type:ident, $($param:ident: $param_type:ty),*) => {
+        fn $name(&self, $($param: $param_type),*) -> Box<ast::Expr> {
+            let expr = Box::new(ast::Expr::$expr_type($($param),*));
+            let expr_loc = self.state.borrow().scanner.loc();
+            self.state.borrow_mut().loc.insert(expr.id(), expr_loc);
+            return expr;
+        }
+    };
+}
+
 impl<'a> Parser<'a> {
     pub fn new(scanner: Scanner<'a>) -> Parser<'a> {
         Parser {
@@ -28,6 +43,7 @@ impl<'a> Parser<'a> {
                 current: None,
                 prev: None,
                 errors: vec![],
+                loc: LocationTable::new(),
             }),
         }
     }
@@ -38,8 +54,25 @@ impl<'a> Parser<'a> {
         self.expression()
     }
 
-    fn line(&self) -> usize {
-        self.state.borrow().scanner.line()
+    pub fn parse(&mut self) -> ParseResult {
+        if let Err(e) = self.prime() {
+            return Err(vec![e]);
+        }
+
+        let stmts = match self.program() {
+            Ok(s) => s,
+            Err(e) => return Err(vec![e]),
+        };
+
+        let errors = std::mem::take(&mut self.state.borrow_mut().errors);
+        if !errors.is_empty() {
+            return Err(errors);
+        }
+        Ok(stmts)
+    }
+
+    pub fn take_location_table(&mut self) -> LocationTable {
+        std::mem::take(&mut self.state.borrow_mut().loc)
     }
 
     fn operator(&self) -> Result<ast::Operator, error::ParseError> {
@@ -61,22 +94,6 @@ impl<'a> Parser<'a> {
             TokenType::Or => Ok(ast::Operator::Or),
             _ => Err(self.error(&format!("Expected operator found '{}'.", token.lexeme))),
         }
-    }
-    pub fn parse(&mut self) -> ParseResult {
-        if let Err(e) = self.prime() {
-            return Err(vec![e]);
-        }
-
-        let stmts = match self.program() {
-            Ok(s) => s,
-            Err(e) => return Err(vec![e]),
-        };
-
-        let errors = std::mem::take(&mut self.state.borrow_mut().errors);
-        if !errors.is_empty() {
-            return Err(errors);
-        }
-        Ok(stmts)
     }
 
     // program → declaration* EOF ;
@@ -114,6 +131,55 @@ impl<'a> Parser<'a> {
         }
     }
 
+    make_expr!(
+        make_unary_expr,
+        unary,
+        operator: ast::Operator,
+        right: Box<ast::Expr>
+    );
+    make_expr!(
+        make_binary_expr,
+        binary,
+        left: Box<ast::Expr>,
+        operator: ast::Operator,
+        right: Box<ast::Expr>
+    );
+    make_expr!(make_grouping_expr, grouping, expr: Box<ast::Expr>);
+    make_expr!(make_literal_string_expr, literal_string, s: String);
+    make_expr!(make_literal_number_expr, literal_number, n: f64);
+    make_expr!(make_literal_bool_expr, literal_bool, b: bool);
+    make_expr!(make_literal_nil_expr, literal_nil,);
+    make_expr!(make_variable_expr, variable, name: String);
+    make_expr!(
+        make_assign_expr,
+        assign,
+        name: String,
+        value: Box<ast::Expr>
+    );
+    make_expr!(
+        make_logical_expr,
+        logical,
+        left: Box<ast::Expr>,
+        operator: ast::Operator,
+        right: Box<ast::Expr>
+    );
+    make_expr!(
+        make_call_expr,
+        call,
+        callee: Box<ast::Expr>,
+        args: Vec<Box<ast::Expr>>
+    );
+    make_expr!(
+        make_set_expr,
+        set,
+        object: Box<ast::Expr>,
+        name: String,
+        value: Box<ast::Expr>
+    );
+    make_expr!(make_super_expr, super_expr, name: String);
+    make_expr!(make_this_expr, this,);
+    make_expr!(make_get_expr, get, object: Box<ast::Expr>, name: String);
+
     //  classDecl → "class" IDENTIFIER ( "<" IDENTIFIER )? "{" function* "}" ;
     fn class_decl(&self) -> StmtResult {
         self.consume(TokenType::Identifier, "Expect class name.")?;
@@ -121,10 +187,7 @@ impl<'a> Parser<'a> {
 
         let superclass = if self.matches(&[TokenType::Less])? {
             self.consume(TokenType::Identifier, "Expect superclass name.")?;
-            Some(Box::new(ast::Expr::variable(
-                self.line(),
-                self.previous().unwrap().lexeme.to_string(),
-            )))
+            Some(self.make_variable_expr(self.previous().unwrap().lexeme.to_string()))
         } else {
             None
         };
@@ -138,11 +201,7 @@ impl<'a> Parser<'a> {
 
         self.consume(TokenType::RightBrace, "Expect '}' after class body.")?;
 
-        Ok(Box::new(ast::Stmt::Class(ClassStmt {
-            name,
-            superclass,
-            methods,
-        })))
+        Ok(Box::new(ast::Stmt::class(name, superclass, methods)))
     }
 
     // funDecl → "fun" function ;
@@ -184,7 +243,7 @@ impl<'a> Parser<'a> {
 
         let body = self.block()?;
 
-        Ok(Rc::new(FunctionStmt { name, params, body }))
+        Ok(Rc::new(ast::Stmt::function(name, params, body)))
     }
 
     // varDecl → "var" IDENTIFIER ( "=" expression )? ";" ;
@@ -202,7 +261,7 @@ impl<'a> Parser<'a> {
             TokenType::Semicolon,
             "Expect ';' after variable declaration.",
         )?;
-        Ok(Box::new(ast::Stmt::Var(ast::VarDecl { name, initializer })))
+        Ok(Box::new(ast::Stmt::var(name, initializer)))
     }
 
     fn prime(&self) -> Result<(), error::ParseError> {
@@ -327,15 +386,10 @@ impl<'a> Parser<'a> {
 
             match *expr {
                 ast::Expr::Variable(v) => {
-                    return Ok(Box::new(ast::Expr::assign(self.line(), v.name, value)));
+                    return Ok(self.make_assign_expr(v.name, value));
                 }
                 ast::Expr::Get(g) => {
-                    return Ok(Box::new(ast::Expr::set(
-                        self.line(),
-                        g.object,
-                        g.name,
-                        value,
-                    )));
+                    return Ok(self.make_set_expr(g.object, g.name, value));
                 }
                 _ => return Err(self.error_at("Invalid assignment target.", "'='")),
             }
@@ -351,7 +405,7 @@ impl<'a> Parser<'a> {
         while self.matches(&[TokenType::Or])? {
             let operator = self.operator()?;
             let right = self.logic_and()?;
-            expr = Box::new(ast::Expr::logical(self.line(), expr, operator, right));
+            expr = self.make_logical_expr(expr, operator, right);
         }
 
         Ok(expr)
@@ -363,7 +417,7 @@ impl<'a> Parser<'a> {
         while self.matches(&[TokenType::And])? {
             let operator = self.operator()?;
             let right = self.equality()?;
-            expr = Box::new(ast::Expr::logical(self.line(), expr, operator, right));
+            expr = self.make_logical_expr(expr, operator, right);
         }
 
         Ok(expr)
@@ -376,7 +430,7 @@ impl<'a> Parser<'a> {
         while self.matches(&[TokenType::BangEqual, TokenType::EqualEqual])? {
             let operator = self.operator()?;
             let right = self.comparison()?;
-            expr = Box::new(ast::Expr::binary(self.line(), expr, operator, right));
+            expr = self.make_binary_expr(expr, operator, right);
         }
 
         Ok(expr)
@@ -394,7 +448,7 @@ impl<'a> Parser<'a> {
         ])? {
             let operator = self.operator()?;
             let right = self.term()?;
-            expr = Box::new(ast::Expr::binary(self.line(), expr, operator, right));
+            expr = self.make_binary_expr(expr, operator, right);
         }
 
         Ok(expr)
@@ -407,7 +461,7 @@ impl<'a> Parser<'a> {
         while self.matches(&[TokenType::Minus, TokenType::Plus])? {
             let operator = self.operator()?;
             let right = self.factor()?;
-            expr = Box::new(ast::Expr::binary(self.line(), expr, operator, right));
+            expr = self.make_binary_expr(expr, operator, right);
         }
 
         Ok(expr)
@@ -420,7 +474,7 @@ impl<'a> Parser<'a> {
         while self.matches(&[TokenType::Slash, TokenType::Star])? {
             let operator = self.operator()?;
             let right = self.unary()?;
-            expr = Box::new(ast::Expr::binary(self.line(), expr, operator, right));
+            expr = self.make_binary_expr(expr, operator, right);
         }
 
         Ok(expr)
@@ -431,7 +485,7 @@ impl<'a> Parser<'a> {
         if self.matches(&[TokenType::Bang, TokenType::Minus])? {
             let operator = self.operator()?;
             let right = self.unary()?;
-            return Ok(Box::new(ast::Expr::unary(self.line(), operator, right)));
+            return Ok(self.make_unary_expr(operator, right));
         }
         self.call()
     }
@@ -446,7 +500,7 @@ impl<'a> Parser<'a> {
             } else if self.matches(&[TokenType::Dot])? {
                 self.consume(TokenType::Identifier, "Expect property name after '.'.")?;
                 let name = self.previous().unwrap().lexeme.to_string();
-                expr = Box::new(ast::Expr::get(self.line(), expr, name));
+                expr = self.make_get_expr(expr, name);
             } else {
                 break;
             }
@@ -473,7 +527,7 @@ impl<'a> Parser<'a> {
 
         self.consume(TokenType::RightParen, "Expect ')' after arguments.")?;
 
-        Ok(Box::new(ast::Expr::call(self.line(), callee, args)))
+        Ok(self.make_call_expr(callee, args))
     }
 
     // primary  → "true" | "false" | "nil" | "this"
@@ -483,47 +537,41 @@ impl<'a> Parser<'a> {
     //          | "super" "." IDENTIFIER ;
     fn primary(&self) -> ExprResult {
         if self.matches(&[TokenType::True])? {
-            return Ok(Box::new(ast::Expr::literal_bool(self.line(), true)));
+            return Ok(self.make_literal_bool_expr(true));
         }
         if self.matches(&[TokenType::False])? {
-            return Ok(Box::new(ast::Expr::literal_bool(self.line(), false)));
+            return Ok(self.make_literal_bool_expr(false));
         }
         if self.matches(&[TokenType::Nil])? {
-            return Ok(Box::new(ast::Expr::literal_nil(self.line())));
+            return Ok(self.make_literal_nil_expr());
         }
         if self.matches(&[TokenType::This])? {
-            return Ok(Box::new(ast::Expr::this(self.line())));
+            return Ok(self.make_this_expr());
         }
         if self.matches(&[TokenType::Number])? {
             if let TokenValue::Number(n) = self.previous().unwrap().value.unwrap() {
-                return Ok(Box::new(ast::Expr::literal_number(self.line(), n)));
+                return Ok(self.make_literal_number_expr(n));
             }
         }
         if self.matches(&[TokenType::String])? {
             if let TokenValue::String(s) = self.previous().unwrap().value.unwrap() {
-                return Ok(Box::new(ast::Expr::literal_string(
-                    self.line(),
-                    s.to_string(),
-                )));
+                return Ok(self.make_literal_string_expr(s.to_string()));
             }
         }
         if self.matches(&[TokenType::Identifier])? {
             let token = self.previous().unwrap();
-            return Ok(Box::new(ast::Expr::variable(
-                self.line(),
-                token.lexeme.to_string(),
-            )));
+            return Ok(self.make_variable_expr(token.lexeme.to_string()));
         }
         if self.matches(&[TokenType::LeftParen])? {
             let expr = self.expression()?;
             self.consume(TokenType::RightParen, "Expect ')' after expression.")?;
-            return Ok(Box::new(ast::Expr::grouping(self.line(), expr)));
+            return Ok(self.make_grouping_expr(expr));
         }
         if self.matches(&[TokenType::Super])? {
             self.consume(TokenType::Dot, "Expect '.' after 'super'.")?;
             self.consume(TokenType::Identifier, "Expect superclass method name.")?;
             let method = self.previous().unwrap().lexeme.to_string();
-            return Ok(Box::new(ast::Expr::super_expr(self.line(), method)));
+            return Ok(self.make_super_expr(method));
         }
         Err(self.error("Expect expression."))
     }
@@ -552,7 +600,7 @@ impl<'a> Parser<'a> {
             return self.while_stmt();
         }
         if self.matches(&[TokenType::LeftBrace])? {
-            return Ok(Box::new(ast::Stmt::Block(self.block()?)));
+            return Ok(Box::new(ast::Stmt::block(self.block()?)));
         }
 
         self.expr_stmt()
@@ -575,14 +623,14 @@ impl<'a> Parser<'a> {
     fn expr_stmt(&self) -> StmtResult {
         let expr = self.expression()?;
         self.consume(TokenType::Semicolon, "Expect ';' after value.")?;
-        Ok(Box::new(ast::Stmt::Expr(expr)))
+        Ok(Box::new(ast::Stmt::expr(expr)))
     }
 
     // printStmt → "print" expression ";"
     fn print_stmt(&self) -> StmtResult {
         let expr = self.expression()?;
         self.consume(TokenType::Semicolon, "Expect ';' after value.")?;
-        Ok(Box::new(ast::Stmt::Print(expr)))
+        Ok(Box::new(ast::Stmt::print(expr)))
     }
 
     // returnStmt → "return" expression? ";" ;
@@ -594,7 +642,7 @@ impl<'a> Parser<'a> {
         };
 
         self.consume(TokenType::Semicolon, "Expect ';' after return value.")?;
-        Ok(Box::new(ast::Stmt::Return(value)))
+        Ok(Box::new(ast::Stmt::return_stmt(value)))
     }
 
     // ifStmt → "if" "(" expression ")" statement
@@ -611,11 +659,11 @@ impl<'a> Parser<'a> {
             None
         };
 
-        Ok(Box::new(ast::Stmt::If(IfStmt {
+        Ok(Box::new(ast::Stmt::if_stmt(
             condition,
             then_branch,
             else_branch,
-        })))
+        )))
     }
 
     // whileStmt → "while" "(" expression ")" statement ;
@@ -628,7 +676,7 @@ impl<'a> Parser<'a> {
 
         let body = self.statement()?;
 
-        Ok(Box::new(ast::Stmt::While(WhileStmt { condition, body })))
+        Ok(Box::new(ast::Stmt::while_stmt(condition, body)))
     }
 
     // forStmt → "for" "(" ( varDecl | exprStmt | ";" )
@@ -646,7 +694,7 @@ impl<'a> Parser<'a> {
         };
 
         let condition = if self.check(TokenType::Semicolon) {
-            Box::new(ast::Expr::literal_bool(self.line(), true))
+            self.make_literal_bool_expr(true)
         } else {
             self.expression()?
         };
@@ -680,15 +728,15 @@ impl<'a> Parser<'a> {
 
         let mut while_block_stmts = vec![body];
         if let Some(increment_expr) = increment {
-            while_block_stmts.push(Box::new(ast::Stmt::Expr(increment_expr)));
+            while_block_stmts.push(Box::new(ast::Stmt::expr(increment_expr)));
         }
 
-        outer_block_stmts.push(Box::new(ast::Stmt::While(WhileStmt {
+        outer_block_stmts.push(Box::new(ast::Stmt::while_stmt(
             condition,
-            body: Box::new(ast::Stmt::Block(while_block_stmts)),
-        })));
+            Box::new(ast::Stmt::block(while_block_stmts)),
+        )));
 
-        Ok(Box::new(ast::Stmt::Block(outer_block_stmts)))
+        Ok(Box::new(ast::Stmt::block(outer_block_stmts)))
     }
 }
 
@@ -725,10 +773,10 @@ mod tests {
     #[test]
     fn literal() -> Result<(), error::ParseError> {
         let false_literal = parse_expression("false")?;
-        assert_eq!(*false_literal, ast::Expr::literal_bool(0, false));
+        assert_eq!(*false_literal, ast::Expr::literal_bool(false));
 
         let true_literal = parse_expression("true")?;
-        assert_eq!(*true_literal, ast::Expr::literal_bool(0, true));
+        assert_eq!(*true_literal, ast::Expr::literal_bool(true));
 
         Ok(())
     }
@@ -738,21 +786,13 @@ mod tests {
         let unary_minus = parse_expression("- 5")?;
         assert_eq!(
             *unary_minus,
-            ast::Expr::unary(
-                0,
-                Operator::Minus,
-                Box::new(ast::Expr::literal_number(0, 5.0)),
-            )
+            ast::Expr::unary(Operator::Minus, Box::new(ast::Expr::literal_number(5.0)),)
         );
 
         let unary_negate = parse_expression("!false")?;
         assert_eq!(
             *unary_negate,
-            ast::Expr::unary(
-                0,
-                Operator::Bang,
-                Box::new(ast::Expr::literal_bool(0, false)),
-            )
+            ast::Expr::unary(Operator::Bang, Box::new(ast::Expr::literal_bool(false)),)
         );
         Ok(())
     }
@@ -763,11 +803,7 @@ mod tests {
 
         assert_eq!(
             *assign_simple,
-            ast::Expr::assign(
-                0,
-                "foo".to_string(),
-                Box::new(ast::Expr::literal_number(0, 3.0)),
-            )
+            ast::Expr::assign("foo".to_string(), Box::new(ast::Expr::literal_number(3.0)),)
         );
 
         Ok(())
@@ -779,8 +815,8 @@ mod tests {
 
         assert_eq!(
             block[0],
-            Box::new(ast::Stmt::Block(vec![Box::new(ast::Stmt::Expr(Box::new(
-                ast::Expr::literal_number(0, 5.0)
+            Box::new(ast::Stmt::block(vec![Box::new(ast::Stmt::expr(Box::new(
+                ast::Expr::literal_number(5.0)
             )))]))
         );
 
@@ -793,13 +829,13 @@ mod tests {
 
         assert_eq!(
             if_statement[0],
-            Box::new(ast::Stmt::If(IfStmt {
-                condition: Box::new(ast::Expr::literal_bool(0, true)),
-                then_branch: Box::new(ast::Stmt::Block(vec![Box::new(ast::Stmt::Print(
-                    Box::new(ast::Expr::literal_number(0, 5.0))
+            Box::new(ast::Stmt::if_stmt(
+                Box::new(ast::Expr::literal_bool(true)),
+                Box::new(ast::Stmt::block(vec![Box::new(ast::Stmt::print(
+                    Box::new(ast::Expr::literal_number(5.0))
                 ))])),
-                else_branch: None,
-            }))
+                None,
+            ))
         );
 
         Ok(())
@@ -816,25 +852,21 @@ mod tests {
 
         assert_eq!(
             stmts[0],
-            Box::new(ast::Stmt::Var(VarDecl {
-                name: "all_tests_passed".to_string(),
-                initializer: None,
-            }))
+            Box::new(ast::Stmt::var("all_tests_passed".to_string(), None,))
         );
 
         assert_eq!(
             stmts[1],
-            Box::new(ast::Stmt::If(IfStmt {
-                condition: Box::new(ast::Expr::literal_bool(0, true)),
-                then_branch: Box::new(ast::Stmt::Block(vec![Box::new(ast::Stmt::Expr(Box::new(
+            Box::new(ast::Stmt::if_stmt(
+                Box::new(ast::Expr::literal_bool(true)),
+                Box::new(ast::Stmt::block(vec![Box::new(ast::Stmt::expr(Box::new(
                     ast::Expr::assign(
-                        0,
                         "all_tests_passed".to_string(),
-                        Box::new(ast::Expr::literal_bool(0, true))
+                        Box::new(ast::Expr::literal_bool(true))
                     )
                 )))])),
-                else_branch: None,
-            }))
+                None,
+            ))
         );
 
         assert_eq!(stmts.len(), 2);
@@ -848,11 +880,10 @@ mod tests {
 
         assert_eq!(
             stmts[0],
-            Box::new(ast::Stmt::Expr(Box::new(ast::Expr::logical(
-                0,
-                Box::new(ast::Expr::literal_bool(0, false)),
+            Box::new(ast::Stmt::expr(Box::new(ast::Expr::logical(
+                Box::new(ast::Expr::literal_bool(false)),
                 Operator::And,
-                Box::new(ast::Expr::literal_bool(0, true)),
+                Box::new(ast::Expr::literal_bool(true)),
             ))))
         );
 
@@ -867,24 +898,21 @@ mod tests {
 
         assert_eq!(
             stmts[0],
-            Box::new(ast::Stmt::While(WhileStmt {
-                condition: Box::new(ast::Expr::binary(
-                    0,
-                    Box::new(ast::Expr::variable(0, "i".to_string())),
+            Box::new(ast::Stmt::while_stmt(
+                Box::new(ast::Expr::binary(
+                    Box::new(ast::Expr::variable("i".to_string())),
                     Operator::Less,
-                    Box::new(ast::Expr::literal_number(0, 5.0))
+                    Box::new(ast::Expr::literal_number(5.0))
                 )),
-                body: Box::new(ast::Stmt::Expr(Box::new(ast::Expr::assign(
-                    0,
+                Box::new(ast::Stmt::expr(Box::new(ast::Expr::assign(
                     "i".to_string(),
                     Box::new(ast::Expr::binary(
-                        0,
-                        Box::new(ast::Expr::variable(0, "i".to_string())),
+                        Box::new(ast::Expr::variable("i".to_string())),
                         Operator::Plus,
-                        Box::new(ast::Expr::literal_number(0, 1.0))
+                        Box::new(ast::Expr::literal_number(1.0))
                     ))
                 ))))
-            }))
+            ))
         );
 
         assert_eq!(stmts.len(), 1);
@@ -907,39 +935,35 @@ mod tests {
 
         assert_eq!(
             stmts,
-            vec![Box::new(ast::Stmt::Block(vec![
+            vec![Box::new(ast::Stmt::block(vec![
                 // "var i = 0;"
-                Box::new(ast::Stmt::Var(VarDecl {
-                    name: "i".to_string(),
-                    initializer: Some(Box::new(ast::Expr::literal_number(0, 0.0)))
-                })),
+                Box::new(ast::Stmt::var(
+                    "i".to_string(),
+                    Some(Box::new(ast::Expr::literal_number(0.0)))
+                )),
                 // "while (i < 10) {"
-                Box::new(ast::Stmt::While(WhileStmt {
-                    condition: Box::new(ast::Expr::binary(
-                        0,
-                        Box::new(ast::Expr::variable(0, "i".to_string())),
+                Box::new(ast::Stmt::while_stmt(
+                    Box::new(ast::Expr::binary(
+                        Box::new(ast::Expr::variable("i".to_string())),
                         Operator::Less,
-                        Box::new(ast::Expr::literal_number(0, 10.0)),
+                        Box::new(ast::Expr::literal_number(10.0)),
                     )),
-                    body: Box::new(ast::Stmt::Block(vec![
+                    Box::new(ast::Stmt::block(vec![
                         // "print i;"
-                        Box::new(ast::Stmt::Print(Box::new(ast::Expr::variable(
-                            0,
+                        Box::new(ast::Stmt::print(Box::new(ast::Expr::variable(
                             "i".to_string()
                         )))),
                         // "i = i + 1;"
-                        Box::new(ast::Stmt::Expr(Box::new(ast::Expr::assign(
-                            0,
+                        Box::new(ast::Stmt::expr(Box::new(ast::Expr::assign(
                             "i".to_string(),
                             Box::new(ast::Expr::binary(
-                                0,
-                                Box::new(ast::Expr::variable(0, "i".to_string())),
+                                Box::new(ast::Expr::variable("i".to_string())),
                                 Operator::Plus,
-                                Box::new(ast::Expr::literal_number(0, 1.0)),
+                                Box::new(ast::Expr::literal_number(1.0)),
                             ))
                         ))))
                     ])),
-                },))
+                ))
             ]))]
         );
 
@@ -953,11 +977,10 @@ mod tests {
         assert_eq!(
             expr,
             Box::new(ast::Expr::call(
-                0,
-                Box::new(ast::Expr::variable(0, "callback".to_string())),
+                Box::new(ast::Expr::variable("callback".to_string())),
                 vec![
-                    Box::new(ast::Expr::literal_number(0, 5.0)),
-                    Box::new(ast::Expr::literal_bool(0, true)),
+                    Box::new(ast::Expr::literal_number(5.0)),
+                    Box::new(ast::Expr::literal_bool(true)),
                 ],
             ))
         );
@@ -971,11 +994,9 @@ mod tests {
 
         assert_eq!(
             stmts,
-            vec![Box::new(ast::Stmt::Expr(Box::new(ast::Expr::call(
-                0,
+            vec![Box::new(ast::Stmt::expr(Box::new(ast::Expr::call(
                 Box::new(ast::Expr::call(
-                    0,
-                    Box::new(ast::Expr::variable(0, "getCallback".to_string())),
+                    Box::new(ast::Expr::variable("getCallback".to_string())),
                     vec![],
                 )),
                 vec![]
@@ -992,16 +1013,15 @@ mod tests {
 
         assert_eq!(
             stmts,
-            vec![Box::new(ast::Stmt::Function(Rc::new(ast::FunctionStmt {
-                name: "add".to_string(),
-                params: vec!["a".to_string(), "b".to_string(),],
-                body: vec![Box::new(ast::Stmt::Print(Box::new(ast::Expr::binary(
-                    0,
-                    Box::new(ast::Expr::variable(0, "a".to_string())),
+            vec![Box::new(ast::Stmt::Function(Rc::new(ast::Stmt::function(
+                "add".to_string(),
+                vec!["a".to_string(), "b".to_string(),],
+                vec![Box::new(ast::Stmt::print(Box::new(ast::Expr::binary(
+                    Box::new(ast::Expr::variable("a".to_string())),
                     Operator::Plus,
-                    Box::new(ast::Expr::variable(0, "b".to_string()))
+                    Box::new(ast::Expr::variable("b".to_string()))
                 ))))],
-            })))]
+            ))))]
         );
 
         Ok(())
@@ -1021,37 +1041,34 @@ mod tests {
         let stmts = parse(source)?;
         assert_eq!(
             stmts,
-            vec![Box::new(ast::Stmt::Class(ClassStmt {
-                name: "Breakfast".to_string(),
-                superclass: None,
-                methods: vec![
-                    Rc::new(ast::FunctionStmt {
-                        name: "cook".to_string(),
-                        params: vec![],
-                        body: vec![Box::new(ast::Stmt::Print(Box::new(
-                            ast::Expr::literal_string(0, "Eggs a-fryin'!".to_string())
+            vec![Box::new(ast::Stmt::class(
+                "Breakfast".to_string(),
+                None,
+                vec![
+                    Rc::new(ast::Stmt::function(
+                        "cook".to_string(),
+                        vec![],
+                        vec![Box::new(ast::Stmt::print(Box::new(
+                            ast::Expr::literal_string("Eggs a-fryin'!".to_string())
                         )))]
-                    }),
-                    Rc::new(ast::FunctionStmt {
-                        name: "serve".to_string(),
-                        params: vec!["who".to_string()],
-                        body: vec![Box::new(ast::Stmt::Print(Box::new(ast::Expr::binary(
-                            0,
+                    )),
+                    Rc::new(ast::Stmt::function(
+                        "serve".to_string(),
+                        vec!["who".to_string()],
+                        vec![Box::new(ast::Stmt::print(Box::new(ast::Expr::binary(
                             Box::new(ast::Expr::binary(
-                                0,
                                 Box::new(ast::Expr::literal_string(
-                                    0,
                                     "Enjoy your breakfast, ".to_string()
                                 )),
                                 Operator::Plus,
-                                Box::new(ast::Expr::variable(0, "who".to_string())),
+                                Box::new(ast::Expr::variable("who".to_string())),
                             )),
                             Operator::Plus,
-                            Box::new(ast::Expr::literal_string(0, ".".to_string()))
+                            Box::new(ast::Expr::literal_string(".".to_string()))
                         ))))]
-                    }),
+                    )),
                 ],
-            }))]
+            ))]
         );
 
         Ok(())
@@ -1066,15 +1083,15 @@ mod tests {
         let stmts = parse(source)?;
         assert_eq!(
             stmts,
-            vec![Box::new(ast::Stmt::Class(ClassStmt {
-                name: "Breakfast".to_string(),
-                superclass: Some(Box::new(ast::Expr::variable(0, "Meal".to_string()),)),
-                methods: vec![Rc::new(FunctionStmt {
-                    name: "cook".to_string(),
-                    params: vec![],
-                    body: vec![]
-                })],
-            }))]
+            vec![Box::new(ast::Stmt::class(
+                "Breakfast".to_string(),
+                Some(Box::new(ast::Expr::variable("Meal".to_string()),)),
+                vec![Rc::new(ast::Stmt::function(
+                    "cook".to_string(),
+                    vec![],
+                    vec![]
+                ))],
+            ))]
         );
 
         Ok(())

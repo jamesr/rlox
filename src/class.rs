@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use by_address::ByAddress;
 
 use crate::{
-    error::RuntimeError,
+    error::{self, RuntimeError},
     eval::{self, Interpreter, Value},
     function,
 };
@@ -73,7 +73,7 @@ impl Instance {
 
         Err(RuntimeError::new(
             format!("Undefined property '{}'.", name),
-            999,
+            error::Location::default(),
         ))
     }
 
@@ -93,7 +93,7 @@ impl eval::Callable for Callable {
             } else {
                 return Err(RuntimeError::new(
                     format!("Failed to bind initializer for '{}'.", &self.class.name),
-                    999,
+                    error::Location::default(),
                 ));
             }
         }

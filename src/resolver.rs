@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::eval::Interpreter;
 use crate::visitor::{self, Visitor};
-use crate::{ast, error};
+use crate::{ast, error, parser};
 
 #[derive(PartialEq)]
 enum VariableState {
@@ -30,17 +30,22 @@ pub struct Resolver<'a> {
     current_function: FunctionType,
     current_class: ClassType,
     interpreter: &'a mut Interpreter,
+    location_table: &'a parser::LocationTable,
 }
 
 type ResolverResult = Result<(), error::Error>;
 
 impl<'a> Resolver<'a> {
-    pub fn new(interpreter: &'a mut Interpreter) -> Resolver<'a> {
+    pub fn new(
+        interpreter: &'a mut Interpreter,
+        location_table: &'a parser::LocationTable,
+    ) -> Resolver<'a> {
         Resolver {
             scopes: vec![],
             current_function: FunctionType::None,
             current_class: ClassType::None,
             interpreter,
+            location_table,
         }
     }
 
@@ -64,7 +69,7 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn declare(&mut self, name: String, line: usize) -> ResolverResult {
+    fn declare(&mut self, name: String, loc: error::Location) -> ResolverResult {
         if let Some(map) = self.scopes.last_mut() {
             if map.contains_key(&name) {
                 return Err(error::Error::Parse(error::ParseError::new(
@@ -72,7 +77,7 @@ impl<'a> Resolver<'a> {
                         "Error at '{}': Already a variable with this name in this scope.",
                         name
                     ),
-                    error::Location { line, col: 0..0 },
+                    loc,
                 )));
             }
             map.insert(name, VariableState::Declared);
@@ -96,7 +101,7 @@ impl<'a> Resolver<'a> {
         self.begin_scope();
 
         for p in &f.params {
-            self.declare(p.clone(), 999)?;
+            self.declare(p.clone(), error::Location::default())?;
             self.define(p.clone());
         }
 
@@ -146,10 +151,7 @@ impl visitor::Visitor<ResolverResult, ResolverResult> for Resolver<'_> {
                         "Error at '{}': Can't read local variable in its own initializer.",
                         &v.name
                     ),
-                    error::Location {
-                        line: v.line(),
-                        col: 0..0,
-                    },
+                    self.location_table.get(&v.id()).unwrap().clone(),
                 )
                 .into());
             }
@@ -252,7 +254,7 @@ impl visitor::Visitor<ResolverResult, ResolverResult> for Resolver<'_> {
     }
 
     fn visit_var_decl_stmt(&mut self, v: &ast::VarDecl) -> ResolverResult {
-        self.declare(v.name.clone(), 999)?;
+        self.declare(v.name.clone(), error::Location::default())?;
         if let Some(initializer) = &v.initializer {
             self.visit_expr(initializer)?;
         }
@@ -275,7 +277,7 @@ impl visitor::Visitor<ResolverResult, ResolverResult> for Resolver<'_> {
     }
 
     fn visit_function_stmt(&mut self, f: &std::rc::Rc<ast::FunctionStmt>) -> ResolverResult {
-        self.declare(f.name.clone(), 999)?;
+        self.declare(f.name.clone(), error::Location::default())?;
         self.define(f.name.clone());
 
         self.resolve_function(f, FunctionType::Function)?;
@@ -286,7 +288,7 @@ impl visitor::Visitor<ResolverResult, ResolverResult> for Resolver<'_> {
         let enclosing_class = self.current_class;
         self.current_class = ClassType::Class;
 
-        self.declare(c.name.clone(), 999)?;
+        self.declare(c.name.clone(), error::Location::default())?;
         self.define(c.name.clone());
 
         if let Some(superclass) = &c.superclass {

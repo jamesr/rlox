@@ -16,135 +16,128 @@ pub enum Expr {
     This(ThisExpr),
 }
 
+macro_rules! ast_node_constructor {
+    ($name:ident, $variant:ident, $ast_ty:ident, $inner:ident, $($pname:ident : $pty:ty),*) => {
+        pub fn $name($($pname: $pty),*) -> $ast_ty {
+            $ast_ty::$variant($inner {
+                id: generate_ast_node_id(),
+                $($pname),*
+            })
+        }
+    };
+}
+
 impl Expr {
-    pub fn unary(line: usize, operator: Operator, right: Box<Expr>) -> Expr {
-        Expr::Unary(UnaryExpr {
-            id: generate_expr_id(),
-            line,
-            operator,
-            right,
-        })
+    pub fn id(&self) -> u64 {
+        match self {
+            Expr::Unary(e) => e.id(),
+            Expr::Binary(e) => e.id(),
+            Expr::Grouping(e) => e.id(),
+            Expr::Literal(e) => e.id(),
+            Expr::Variable(e) => e.id(),
+            Expr::Assign(e) => e.id(),
+            Expr::Logical(e) => e.id(),
+            Expr::Call(e) => e.id(),
+            Expr::Get(e) => e.id(),
+            Expr::Set(e) => e.id(),
+            Expr::Super(e) => e.id(),
+            Expr::This(e) => e.id(),
+        }
     }
+    ast_node_constructor!(
+        unary,
+        Unary,
+        Expr,
+        UnaryExpr,
+        operator: Operator,
+        right: Box<Expr>
+    );
 
-    pub fn binary(line: usize, left: Box<Expr>, operator: Operator, right: Box<Expr>) -> Expr {
-        Expr::Binary(BinaryExpr {
-            id: generate_expr_id(),
-            line,
-            left,
-            operator,
-            right,
-        })
-    }
+    ast_node_constructor!(
+        binary,
+        Binary,
+        Expr,
+        BinaryExpr,
+        left: Box<Expr>,
+        operator: Operator,
+        right: Box<Expr>
+    );
 
-    pub fn grouping(line: usize, expr: Box<Expr>) -> Expr {
-        Expr::Grouping(GroupingExpr {
-            id: generate_expr_id(),
-            line,
-            expr,
-        })
-    }
+    ast_node_constructor!(grouping, Grouping, Expr, GroupingExpr, expr: Box<Expr>);
 
-    pub fn literal_string(line: usize, s: String) -> Expr {
+    pub fn literal_string(s: String) -> Expr {
         Expr::Literal(LiteralExpr {
-            id: generate_expr_id(),
-            line,
+            id: generate_ast_node_id(),
             value: LiteralValue::String(s),
         })
     }
 
-    pub fn literal_number(line: usize, n: f64) -> Expr {
+    pub fn literal_number(n: f64) -> Expr {
         Expr::Literal(LiteralExpr {
-            id: generate_expr_id(),
-            line,
+            id: generate_ast_node_id(),
             value: LiteralValue::Number(n),
         })
     }
 
-    pub fn literal_bool(line: usize, b: bool) -> Expr {
+    pub fn literal_bool(b: bool) -> Expr {
         Expr::Literal(LiteralExpr {
-            id: generate_expr_id(),
-            line,
+            id: generate_ast_node_id(),
             value: LiteralValue::Bool(b),
         })
     }
 
-    pub fn literal_nil(line: usize) -> Expr {
+    pub fn literal_nil() -> Expr {
         Expr::Literal(LiteralExpr {
-            id: generate_expr_id(),
-            line,
+            id: generate_ast_node_id(),
             value: LiteralValue::Nil,
         })
     }
 
-    pub fn variable(line: usize, name: String) -> Expr {
-        Expr::Variable(VariableExpr {
-            id: generate_expr_id(),
-            line,
-            name,
-        })
-    }
+    ast_node_constructor!(variable, Variable, Expr, VariableExpr, name: String);
 
-    pub fn assign(line: usize, name: String, value: Box<Expr>) -> Expr {
-        Expr::Assign(AssignExpr {
-            id: generate_expr_id(),
-            line,
-            name,
-            value,
-        })
-    }
+    ast_node_constructor!(
+        assign,
+        Assign,
+        Expr,
+        AssignExpr,
+        name: String,
+        value: Box<Expr>
+    );
 
-    pub fn logical(line: usize, left: Box<Expr>, operator: Operator, right: Box<Expr>) -> Expr {
-        Expr::Logical(LogicalExpr {
-            id: generate_expr_id(),
-            line,
-            left,
-            operator,
-            right,
-        })
-    }
+    ast_node_constructor!(
+        logical,
+        Logical,
+        Expr,
+        LogicalExpr,
+        left: Box<Expr>,
+        operator: Operator,
+        right: Box<Expr>
+    );
 
-    pub fn call(line: usize, callee: Box<Expr>, args: Vec<Box<Expr>>) -> Expr {
-        Expr::Call(CallExpr {
-            id: generate_expr_id(),
-            line,
-            callee,
-            args,
-        })
-    }
+    ast_node_constructor!(
+        call,
+        Call,
+        Expr,
+        CallExpr,
+        callee: Box<Expr>,
+        args: Vec<Box<Expr>>
+    );
 
-    pub fn get(line: usize, object: Box<Expr>, name: String) -> Expr {
-        Expr::Get(GetExpr {
-            id: generate_expr_id(),
-            line,
-            object,
-            name,
-        })
-    }
+    ast_node_constructor!(get, Get, Expr, GetExpr, object: Box<Expr>, name: String);
 
-    pub fn set(line: usize, object: Box<Expr>, name: String, value: Box<Expr>) -> Expr {
-        Expr::Set(SetExpr {
-            id: generate_expr_id(),
-            line,
-            object,
-            name,
-            value,
-        })
-    }
+    ast_node_constructor!(
+        set,
+        Set,
+        Expr,
+        SetExpr,
+        object: Box<Expr>,
+        name: String,
+        value: Box<Expr>
+    );
 
-    pub fn super_expr(line: usize, name: String) -> Expr {
-        Expr::Super(SuperExpr {
-            id: generate_expr_id(),
-            line,
-            name,
-        })
-    }
+    ast_node_constructor!(super_expr, Super, Expr, SuperExpr, name: String);
 
-    pub fn this(line: usize) -> Expr {
-        Expr::This(ThisExpr {
-            id: generate_expr_id(),
-            line,
-        })
-    }
+    ast_node_constructor!(this, This, Expr, ThisExpr,);
 }
 
 #[derive(PartialEq, Debug)]
@@ -180,19 +173,16 @@ macro_rules! partial_eq_expr_field_eq {
     };
 }
 
-macro_rules! define_expr {
+macro_rules! define_ast_node {
     ($name:ident, $($field:ident: $type:ty),*) => {
         #[derive(Debug)]
         pub struct $name {
             id: u64,
-            line: usize,
-            //line: u64,
             $(pub $field: $type,)*
         }
 
         impl $name {
             pub fn id(self: &$name) -> u64 { self.id }
-            pub fn line(self: &$name) -> usize { self.line }
         }
 
         impl PartialEq for $name {
@@ -206,41 +196,28 @@ macro_rules! define_expr {
     };
 }
 
-define_expr!(UnaryExpr, operator: Operator, right: Box<Expr>);
-define_expr!(
+define_ast_node!(UnaryExpr, operator: Operator, right: Box<Expr>);
+define_ast_node!(
     BinaryExpr,
     left: Box<Expr>,
     operator: Operator,
     right: Box<Expr>
 );
-define_expr!(GroupingExpr, expr: Box<Expr>);
-define_expr!(LiteralExpr, value: LiteralValue);
-define_expr!(VariableExpr, name: String);
-define_expr!(AssignExpr, name: String, value: Box<Expr>);
-define_expr!(
+define_ast_node!(GroupingExpr, expr: Box<Expr>);
+define_ast_node!(LiteralExpr, value: LiteralValue);
+define_ast_node!(VariableExpr, name: String);
+define_ast_node!(AssignExpr, name: String, value: Box<Expr>);
+define_ast_node!(
     LogicalExpr,
     left: Box<Expr>,
     operator: Operator,
     right: Box<Expr>
 );
-define_expr!(CallExpr, callee: Box<Expr>, args: Vec<Box<Expr>>);
-define_expr!(SetExpr, object: Box<Expr>, name: String, value: Box<Expr>);
-define_expr!(SuperExpr, name: String);
-define_expr!(ThisExpr,);
-define_expr!(GetExpr, object: Box<Expr>, name: String);
-
-#[derive(PartialEq, Debug)]
-pub enum Stmt {
-    Expr(Box<Expr>),
-    Print(Box<Expr>),
-    Return(Option<Box<Expr>>),
-    Block(Vec<Box<Stmt>>),
-    Var(VarDecl),
-    If(IfStmt),
-    While(WhileStmt),
-    Function(Rc<FunctionStmt>),
-    Class(ClassStmt),
-}
+define_ast_node!(CallExpr, callee: Box<Expr>, args: Vec<Box<Expr>>);
+define_ast_node!(SetExpr, object: Box<Expr>, name: String, value: Box<Expr>);
+define_ast_node!(SuperExpr, name: String);
+define_ast_node!(ThisExpr,);
+define_ast_node!(GetExpr, object: Box<Expr>, name: String);
 
 #[derive(PartialEq, Debug)]
 pub enum LiteralValue {
@@ -251,37 +228,103 @@ pub enum LiteralValue {
 }
 
 #[derive(PartialEq, Debug)]
-pub struct VarDecl {
-    pub name: String,
-    pub initializer: Option<Box<Expr>>,
+pub enum Stmt {
+    Expr(ExprStmt),
+    Print(PrintStmt),
+    Return(ReturnStmt),
+    Block(BlockStmt),
+    Var(VarDecl),
+    If(IfStmt),
+    While(WhileStmt),
+    Function(Rc<FunctionStmt>),
+    Class(ClassStmt),
 }
 
-#[derive(PartialEq, Debug)]
-pub struct IfStmt {
-    pub condition: Box<Expr>,
-    pub then_branch: Box<Stmt>,
-    pub else_branch: Option<Box<Stmt>>,
+impl Stmt {
+    pub fn id(&self) -> u64 {
+        0
+    }
+
+    ast_node_constructor!(expr, Expr, Stmt, ExprStmt, expr: Box<Expr>);
+    ast_node_constructor!(print, Print, Stmt, PrintStmt, expr: Box<Expr>);
+    ast_node_constructor!(
+        return_stmt,
+        Return,
+        Stmt,
+        ReturnStmt,
+        value: Option<Box<Expr>>
+    );
+    ast_node_constructor!(block, Block, Stmt, BlockStmt, stmts: Vec<Box<Stmt>>);
+    ast_node_constructor!(
+        var,
+        Var,
+        Stmt,
+        VarDecl,
+        name: String,
+        initializer: Option<Box<Expr>>
+    );
+    ast_node_constructor!(
+        if_stmt,
+        If,
+        Stmt,
+        IfStmt,
+        condition: Box<Expr>,
+        then_branch: Box<Stmt>,
+        else_branch: Option<Box<Stmt>>
+    );
+    ast_node_constructor!(
+        while_stmt,
+        While,
+        Stmt,
+        WhileStmt,
+        condition: Box<Expr>,
+        body: Box<Stmt>
+    );
+
+    pub fn function(name: String, params: Vec<String>, body: Vec<Box<Stmt>>) -> FunctionStmt {
+        FunctionStmt {
+            id: generate_ast_node_id(),
+            name,
+            params,
+            body,
+        }
+    }
+
+    ast_node_constructor!(
+        class,
+        Class,
+        Stmt,
+        ClassStmt,
+        name: String,
+        superclass: Option<Box<Expr>>,
+        methods: Vec<Rc<FunctionStmt>>
+    );
 }
 
-#[derive(PartialEq, Debug)]
-pub struct WhileStmt {
-    pub condition: Box<Expr>,
-    pub body: Box<Stmt>,
-}
-
-#[derive(PartialEq, Debug)]
-pub struct FunctionStmt {
-    pub name: String,
-    pub params: Vec<String>,
-    pub body: Vec<Box<Stmt>>,
-}
-
-#[derive(PartialEq, Debug)]
-pub struct ClassStmt {
-    pub name: String,
-    pub superclass: Option<Box<Expr>>,
-    pub methods: Vec<Rc<FunctionStmt>>,
-}
+define_ast_node!(ExprStmt, expr: Box<Expr>);
+define_ast_node!(PrintStmt, expr: Box<Expr>);
+define_ast_node!(ReturnStmt, value: Option<Box<Expr>>);
+define_ast_node!(BlockStmt, stmts: Vec<Box<Stmt>>);
+define_ast_node!(VarDecl, name: String, initializer: Option<Box<Expr>>);
+define_ast_node!(
+    IfStmt,
+    condition: Box<Expr>,
+    then_branch: Box<Stmt>,
+    else_branch: Option<Box<Stmt>>
+);
+define_ast_node!(WhileStmt, condition: Box<Expr>, body: Box<Stmt>);
+define_ast_node!(
+    FunctionStmt,
+    name: String,
+    params: Vec<String>,
+    body: Vec<Box<Stmt>>
+);
+define_ast_node!(
+    ClassStmt,
+    name: String,
+    superclass: Option<Box<Expr>>,
+    methods: Vec<Rc<FunctionStmt>>
+);
 
 impl std::fmt::Display for Operator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -309,12 +352,12 @@ impl std::fmt::Display for Operator {
 }
 
 lazy_static::lazy_static! {
-    static ref NEXT_EXPR_ID: std::sync::Mutex<u64> = Mutex::new(0);
+    static ref NEXT_AST_NODE_ID: std::sync::Mutex<u64> = Mutex::new(0);
 }
 
-fn generate_expr_id() -> u64 {
-    let mut next_expr_id = NEXT_EXPR_ID.lock().unwrap();
-    let id = *next_expr_id;
-    *next_expr_id = id + 1;
+fn generate_ast_node_id() -> u64 {
+    let mut next_ast_node_id = NEXT_AST_NODE_ID.lock().unwrap();
+    let id = *next_ast_node_id;
+    *next_ast_node_id = id + 1;
     id
 }

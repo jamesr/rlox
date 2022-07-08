@@ -5,7 +5,7 @@ use by_address::ByAddress;
 use crate::{
     ast, class, env,
     error::{self, RuntimeError},
-    function,
+    function, parser,
     visitor::Visitor,
 };
 
@@ -49,6 +49,7 @@ pub struct Interpreter {
     globals: Rc<RefCell<env::Env>>,
     errors: Vec<error::Error>,
     locals: HashMap<u64, usize>,
+    location_table: Option<parser::LocationTable>,
 }
 
 type ExprResult = Result<Value, RuntimeError>;
@@ -68,13 +69,20 @@ impl Interpreter {
             globals,
             errors: vec![],
             locals: HashMap::new(),
+            location_table: None,
         }
     }
 
-    pub fn interpret(&mut self, stmts: &Vec<Box<ast::Stmt>>) -> StmtResult {
+    pub fn interpret(
+        &mut self,
+        stmts: &Vec<Box<ast::Stmt>>,
+        location_table: parser::LocationTable,
+    ) -> StmtResult {
+        self.location_table = Some(location_table);
         for s in stmts {
             self.visit_stmt(&*s)?;
         }
+        self.location_table = None;
         Ok(())
     }
 
@@ -125,6 +133,20 @@ impl Interpreter {
 
     pub fn resolve(&mut self, expr_id: u64, depth: usize) {
         self.locals.insert(expr_id, depth);
+    }
+
+    fn expr_loc(&self, expr_id: u64) -> error::Location {
+        self.location_table
+            .as_ref()
+            .unwrap()
+            .get(&expr_id)
+            .unwrap()
+            .clone()
+    }
+
+    fn stmt_loc(&self, _: u64) -> error::Location {
+        //*self.location_table.unwrap().get(&expr_id).unwrap()
+        error::Location::default()
     }
 
     fn lookup_variable(&mut self, name: &String, expr_id: u64) -> ExprResult {
@@ -194,10 +216,13 @@ fn truthy(v: &Value) -> bool {
     }
 }
 
-fn as_number(v: &Value, line: usize) -> Result<f64, RuntimeError> {
+fn as_number(v: &Value, loc: error::Location) -> Result<f64, RuntimeError> {
     match v {
         Value::Number(n) => Ok(*n),
-        _ => Err((format!("Operands must be numbers."), line).into()),
+        _ => Err(RuntimeError::new(
+            "Operands must be numbers.".to_string(),
+            loc,
+        )),
     }
 }
 
@@ -237,7 +262,7 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
             _ => {
                 return Err(error::RuntimeError::new(
                     "Can only call functions and classes.".to_string(),
-                    c.line(),
+                    self.expr_loc(c.id()),
                 ))
             }
         };
@@ -249,7 +274,7 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
                     callable.arity(),
                     args.len()
                 ),
-                c.line(),
+                self.expr_loc(c.id()),
             ));
         }
 
@@ -266,7 +291,7 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
 
         Err(error::RuntimeError::new(
             "Only instances have fields.".to_string(),
-            s.line(),
+            self.expr_loc(s.id()),
         ))
     }
 
@@ -278,7 +303,7 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
 
         Err(error::RuntimeError::new(
             "Only instances have properties.".to_string(),
-            g.line(),
+            self.expr_loc(g.id()),
         ))
     }
 
@@ -288,7 +313,7 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
             None => {
                 return Err(error::RuntimeError::new(
                     "'super' not found in locals".to_string(),
-                    s.line(),
+                    self.expr_loc(s.id()),
                 ));
             }
         };
@@ -308,7 +333,7 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
                 None => {
                     return Err(error::RuntimeError::new(
                         format!("Undefined property '{}'.", &s.name),
-                        s.line(),
+                        self.expr_loc(s.id()),
                     ));
                 }
             };
@@ -317,7 +342,7 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
 
         Err(error::RuntimeError::new(
             "'super' not a a class.".to_string(),
-            s.line(),
+            self.expr_loc(s.id()),
         ))
     }
 
@@ -332,44 +357,67 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
         use ast::Operator::*;
         match e.operator {
             Minus => Ok(Value::Number(
-                as_number(&left, e.line())? - as_number(&right, e.line())?,
+                as_number(&left, self.expr_loc(e.id()))?
+                    - as_number(&right, self.expr_loc(e.id()))?,
             )),
             Slash => Ok(Value::Number(
-                as_number(&left, e.line())? / as_number(&right, e.line())?,
+                as_number(&left, self.expr_loc(e.id()))?
+                    / as_number(&right, self.expr_loc(e.id()))?,
             )),
             Star => Ok(Value::Number(
-                as_number(&left, e.line())? * as_number(&right, e.line())?,
+                as_number(&left, self.expr_loc(e.id()))?
+                    * as_number(&right, self.expr_loc(e.id()))?,
             )),
             Plus => match left {
                 Value::Number(left_number) => match right {
                     Value::Number(right_number) => Ok(Value::Number(left_number + right_number)),
-                    _ => Err(("Operands must be two numbers or two strings.", e.line()).into()),
+                    _ => Err((
+                        "Operands must be two numbers or two strings.",
+                        self.expr_loc(e.id()),
+                    )
+                        .into()),
                 },
 
                 Value::String(left_string) => match right {
                     Value::String(right_string) => Ok(Value::String(left_string + &right_string)),
 
-                    _ => Err(("Operands must be two numbers or two strings.", e.line()).into()),
+                    _ => Err((
+                        "Operands must be two numbers or two strings.",
+                        self.expr_loc(e.id()),
+                    )
+                        .into()),
                 },
 
-                _ => Err(("Operands must be two numbers or two strings.", e.line()).into()),
+                _ => Err((
+                    "Operands must be two numbers or two strings.",
+                    self.expr_loc(e.id()),
+                )
+                    .into()),
             },
             Greater => Ok(Value::Bool(
-                as_number(&left, e.line())? > as_number(&right, e.line())?,
+                as_number(&left, self.expr_loc(e.id()))?
+                    > as_number(&right, self.expr_loc(e.id()))?,
             )),
             GreaterEqual => Ok(Value::Bool(
-                as_number(&left, e.line())? >= as_number(&right, e.line())?,
+                as_number(&left, self.expr_loc(e.id()))?
+                    >= as_number(&right, self.expr_loc(e.id()))?,
             )),
             Less => Ok(Value::Bool(
-                as_number(&left, e.line())? < as_number(&right, e.line())?,
+                as_number(&left, self.expr_loc(e.id()))?
+                    < as_number(&right, self.expr_loc(e.id()))?,
             )),
             LessEqual => Ok(Value::Bool(
-                as_number(&left, e.line())? <= as_number(&right, e.line())?,
+                as_number(&left, self.expr_loc(e.id()))?
+                    <= as_number(&right, self.expr_loc(e.id()))?,
             )),
             BangEqual => Ok(Value::Bool(left != right)),
             EqualEqual => Ok(Value::Bool(left == right)),
 
-            _ => Err((format!("unknown operator {}", e.operator), e.line()).into()),
+            _ => Err((
+                format!("unknown operator {}", e.operator),
+                self.expr_loc(e.id()),
+            )
+                .into()),
         }
     }
 
@@ -383,10 +431,10 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
         match e.operator {
             Minus => match val {
                 Value::Number(n) => Ok(Value::Number(-n)),
-                _ => Err(("Operand must be a number.", e.line()).into()),
+                _ => Err(("Operand must be a number.", self.expr_loc(e.id())).into()),
             },
             Bang => Ok(Value::Bool(!truthy(&val))),
-            _ => Err(("unsupported unary operator", e.line()).into()),
+            _ => Err(("unsupported unary operator", self.expr_loc(e.id())).into()),
         }
     }
 
@@ -481,7 +529,7 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
             } else {
                 return Err(error::RuntimeError::new(
                     "Superclass must be a class.".to_string(),
-                    999,
+                    self.stmt_loc(0),
                 ));
             }
         } else {
@@ -533,7 +581,7 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
 
 #[cfg(test)]
 mod tests {
-    use crate::{error, eval::Value, parser::parse_expression, resolver};
+    use crate::{error, eval::Value, parser, resolver, scanner};
 
     use super::Interpreter;
 
@@ -543,8 +591,11 @@ mod tests {
             fn $name() -> Result<(), error::Error> {
                 let mut interpreter = Interpreter::new();
 
-                let expr = parse_expression($source)?;
-                let mut resolver = resolver::Resolver::new(&mut interpreter);
+                let scanner = scanner::Scanner::new($source);
+                let mut parser = parser::Parser::new(scanner);
+                let expr = parser.parse_expression()?;
+                let location_table = parser.take_location_table();
+                let mut resolver = resolver::Resolver::new(&mut interpreter, &location_table);
                 resolver.resolve_expr(&expr)?;
                 assert_eq!(interpreter.interpret_expr(&expr)?, $expected_value);
                 Ok(())
@@ -579,8 +630,10 @@ mod tests {
             #[test]
             fn $name() -> Result<(), error::Error> {
                 let mut interpreter = Interpreter::new();
+                let scanner = scanner::Scanner::new($source);
+                let mut parser = parser::Parser::new(scanner);
 
-                let stmts = match crate::parser::parse($source) {
+                let stmts = match parser.parse() {
                     Ok(s) => s,
                     Err(e) => {
                         return Err(error::convert_parse(&e));
@@ -591,9 +644,10 @@ mod tests {
                     use crate::visitor::Visitor;
                     printer.visit_stmt(&stmt);
                 }
-                let mut resolver = resolver::Resolver::new(&mut interpreter);
+                let location_table = parser.take_location_table();
+                let mut resolver = resolver::Resolver::new(&mut interpreter, &location_table);
                 resolver.resolve(&stmts)?;
-                interpreter.interpret(&stmts)?;
+                interpreter.interpret(&stmts, location_table)?;
 
                 let all_tests_passed_expr = crate::parser::parse_expression("all_tests_passed")?;
                 let result = interpreter.interpret_expr(&all_tests_passed_expr)?;

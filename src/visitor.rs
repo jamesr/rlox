@@ -40,12 +40,12 @@ pub trait Visitor<ExprResult, StmtResult> {
         use Stmt::*;
         match s {
             Expr(e) => {
-                let expr_result = self.visit_expr(e);
+                let expr_result = self.visit_expr(&e.expr);
                 return self.expr_result_to_stmt_result(expr_result);
             }
-            Print(e) => self.visit_print_stmt(e),
-            Return(r) => self.visit_return_stmt(r),
-            Block(v) => self.visit_block(v),
+            Print(e) => self.visit_print_stmt(&e.expr),
+            Return(r) => self.visit_return_stmt(&r.value),
+            Block(v) => self.visit_block(&v.stmts),
             Var(v) => self.visit_var_decl_stmt(v),
             If(i) => self.visit_if_stmt(i),
             While(i) => self.visit_while_stmt(i),
@@ -221,10 +221,9 @@ mod tests {
     #[test]
     fn print_binary_expr() {
         let expr = Expr::binary(
-            0,
-            Box::new(Expr::literal_number(0, 5.0)),
+            Box::new(Expr::literal_number(5.0)),
             Operator::Plus,
-            Box::new(Expr::literal_number(0, 4.0)),
+            Box::new(Expr::literal_number(4.0)),
         );
         let mut printer = AstPrinter {};
         assert_eq!(printer.visit_expr(&expr), "( 5 + 4 )");
@@ -232,7 +231,7 @@ mod tests {
 
     #[test]
     fn print_grouping_expr() {
-        let expr = Expr::grouping(0, Box::new(Expr::literal_number(0, 5.0)));
+        let expr = Expr::grouping(Box::new(Expr::literal_number(5.0)));
         let mut printer = AstPrinter {};
         assert_eq!(printer.visit_expr(&expr), "group ( 5 )");
     }
@@ -240,9 +239,9 @@ mod tests {
     #[test]
     fn print_literal() {
         let mut printer = AstPrinter {};
-        assert_eq!(printer.visit_expr(&Expr::literal_number(0, 1.0)), "1");
+        assert_eq!(printer.visit_expr(&Expr::literal_number(1.0)), "1");
         assert_eq!(
-            printer.visit_expr(&Expr::literal_string(0, "hi".to_string())),
+            printer.visit_expr(&Expr::literal_string("hi".to_string())),
             "hi"
         );
     }
@@ -252,9 +251,8 @@ mod tests {
         let mut printer = AstPrinter {};
         assert_eq!(
             printer.visit_expr(&Expr::unary(
-                0,
                 Operator::Minus,
-                Box::new(Expr::literal_number(0, 5.0)),
+                Box::new(Expr::literal_number(5.0)),
             )),
             "( - 5 )"
         );

@@ -15,22 +15,25 @@ pub mod scanner;
 pub mod visitor;
 
 fn run(source: &str, interpreter: &mut Interpreter) -> Result<(), error::Error> {
-    let stmts = match parser::parse(source) {
+    let scanner = scanner::Scanner::new(source);
+    let mut parser = parser::Parser::new(scanner);
+    let stmts = match parser.parse() {
         Ok(s) => s,
         Err(v) => {
             return Err(error::convert_parse(&v));
         }
     };
-    let mut resolver = resolver::Resolver::new(interpreter);
+    let location_table = parser.take_location_table();
+    let mut resolver = resolver::Resolver::new(interpreter, &location_table);
     resolver.resolve(&stmts)?;
-    interpreter.interpret(&stmts)?;
+    interpreter.interpret(&stmts, location_table)?;
     if interpreter.has_error() {
         for e in interpreter.errors() {
             println!("{}", e);
         }
         return Err(error::Error::Runtime(error::RuntimeError::new(
             "interpretation failed".to_string(),
-            999,
+            error::Location::default(),
         )));
     }
     Ok(())

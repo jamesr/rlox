@@ -4,7 +4,10 @@ use std::{
     rc::Rc,
 };
 
-use crate::{error::RuntimeError, eval};
+use crate::{
+    error::{self, RuntimeError},
+    eval,
+};
 
 type Values = HashMap<String, eval::Value>;
 
@@ -59,7 +62,11 @@ impl Env {
         if let Some(v) = self.values.get(name) {
             return Ok(v.clone());
         }
-        Err((format!("Undefined variable '{}'.", name), 999).into())
+        Err((
+            format!("Undefined variable '{}'.", name),
+            error::Location::default(),
+        )
+            .into())
     }
 
     pub fn assign(&mut self, name: String, value: eval::Value) -> Result<(), RuntimeError> {
@@ -67,6 +74,10 @@ impl Env {
             entry.insert(value);
             return Ok(());
         }
-        Err((format!("Undefined variable '{}'.", name), 999).into())
+        Err((
+            format!("Undefined variable '{}'.", name),
+            error::Location::default(),
+        )
+            .into())
     }
 }

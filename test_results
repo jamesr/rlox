@@ -32,7 +32,7 @@ Passed: 23 Failed: 0 Skipped: 6 (test/variable/redeclare_global.lox)
 Passed: 24 Failed: 0 Skipped: 6 (test/variable/use_nil_as_var.lox)
 Passed: 25 Failed: 0 Skipped: 6 (test/variable/undefined_global.lox)
 FAIL test/variable/undefined_global.lox
-     Expected runtime error on line 1 but was on line 999.
+     Expected runtime error on line 1 but was on line 0.
 
 
 Passed: 25 Failed: 1 Skipped: 6 (test/variable/shadow_and_local.lox)
@@ -40,7 +40,7 @@ Passed: 26 Failed: 1 Skipped: 6 (test/variable/early_bound.lox)
 Passed: 27 Failed: 1 Skipped: 6 (test/variable/duplicate_parameter.lox)
 FAIL test/variable/duplicate_parameter.lox
      Unexpected error:
-     [line 999] Error at 'arg': Already a variable with this name in this scope.
+     [line 0] Error at 'arg': Already a variable with this name in this scope.
      Missing expected error: [2] Error at 'arg': Already a variable with this name in this scope.
 
 
@@ -50,7 +50,7 @@ Passed: 29 Failed: 2 Skipped: 6 (test/variable/shadow_global.lox)
 Passed: 30 Failed: 2 Skipped: 6 (test/variable/duplicate_local.lox)
 FAIL test/variable/duplicate_local.lox
      Unexpected error:
-     [line 999] Error at 'a': Already a variable with this name in this scope.
+     [line 0] Error at 'a': Already a variable with this name in this scope.
      Missing expected error: [3] Error at 'a': Already a variable with this name in this scope.
 
 
@@ -60,7 +60,7 @@ Passed: 32 Failed: 3 Skipped: 6 (test/variable/unreached_undefined.lox)
 Passed: 33 Failed: 3 Skipped: 6 (test/variable/collide_with_parameter.lox)
 FAIL test/variable/collide_with_parameter.lox
      Unexpected error:
-     [line 999] Error at 'a': Already a variable with this name in this scope.
+     [line 0] Error at 'a': Already a variable with this name in this scope.
      Missing expected error: [2] Error at 'a': Already a variable with this name in this scope.
 
 
@@ -68,7 +68,7 @@ Passed: 33 Failed: 4 Skipped: 6 (test/variable/use_local_in_initializer.lox)
 Passed: 34 Failed: 4 Skipped: 6 (test/variable/redefine_global.lox)
 Passed: 35 Failed: 4 Skipped: 6 (test/variable/undefined_local.lox)
 FAIL test/variable/undefined_local.lox
-     Expected runtime error on line 2 but was on line 999.
+     Expected runtime error on line 2 but was on line 0.
 
 
 Passed: 35 Failed: 5 Skipped: 6 (test/nil/literal.lox)
@@ -97,7 +97,7 @@ Passed: 52 Failed: 6 Skipped: 6 (test/assignment/infix_operator.lox)
 Passed: 53 Failed: 6 Skipped: 6 (test/assignment/local.lox)
 Passed: 54 Failed: 6 Skipped: 6 (test/assignment/undefined.lox)
 FAIL test/assignment/undefined.lox
-     Expected runtime error on line 1 but was on line 999.
+     Expected runtime error on line 1 but was on line 0.
 
 
 Passed: 54 Failed: 7 Skipped: 6 (test/return/after_if.lox)
@@ -115,7 +115,7 @@ Passed: 58 Failed: 8 Skipped: 6 (test/return/in_function.lox)
 Passed: 59 Failed: 8 Skipped: 6 (test/return/after_while.lox)
 Passed: 60 Failed: 8 Skipped: 6 (test/function/local_mutual_recursion.lox)
 FAIL test/function/local_mutual_recursion.lox
-     Expected runtime error on line 4 but was on line 999.
+     Expected runtime error on line 4 but was on line 0.
 
 
 Passed: 60 Failed: 9 Skipped: 6 (test/function/empty_body.lox)
@@ -152,7 +152,7 @@ Passed: 84 Failed: 9 Skipped: 12 (test/field/get_on_function.lox)
 Passed: 85 Failed: 9 Skipped: 12 (test/field/call_function_field.lox)
 Passed: 86 Failed: 9 Skipped: 12 (test/field/set_evaluation_order.lox)
 FAIL test/field/set_evaluation_order.lox
-     Expected runtime error on line 1 but was on line 999.
+     Expected runtime error on line 1 but was on line 0.
 
 
 Passed: 86 Failed: 10 Skipped: 12 (test/field/method_binds_this.lox)
@@ -163,7 +163,7 @@ Passed: 90 Failed: 10 Skipped: 12 (test/field/get_on_bool.lox)
 Passed: 91 Failed: 10 Skipped: 12 (test/field/get_on_num.lox)
 Passed: 92 Failed: 10 Skipped: 12 (test/field/undefined.lox)
 FAIL test/field/undefined.lox
-     Expected runtime error on line 4 but was on line 999.
+     Expected runtime error on line 4 but was on line 0.
 
 
 Passed: 92 Failed: 11 Skipped: 12 (test/print/missing_argument.lox)
@@ -183,19 +183,19 @@ Passed: 104 Failed: 11 Skipped: 13 (test/logical_operator/and_truth.lox)
 Passed: 105 Failed: 11 Skipped: 13 (test/logical_operator/or_truth.lox)
 Passed: 106 Failed: 11 Skipped: 13 (test/inheritance/inherit_from_nil.lox)
 FAIL test/inheritance/inherit_from_nil.lox
-     Expected runtime error on line 2 but was on line 999.
+     Expected runtime error on line 2 but was on line 0.
 
 
 Passed: 106 Failed: 12 Skipped: 13 (test/inheritance/inherit_from_function.lox)
 FAIL test/inheritance/inherit_from_function.lox
-     Expected runtime error on line 3 but was on line 999.
+     Expected runtime error on line 3 but was on line 0.
 
 
 Passed: 106 Failed: 13 Skipped: 13 (test/inheritance/parenthesized_superclass.lox)
 Passed: 107 Failed: 13 Skipped: 13 (test/inheritance/set_fields_from_base_class.lox)
 Passed: 108 Failed: 13 Skipped: 13 (test/inheritance/inherit_from_number.lox)
 FAIL test/inheritance/inherit_from_number.lox
-     Expected runtime error on line 2 but was on line 999.
+     Expected runtime error on line 2 but was on line 0.
 
 
 Passed: 108 Failed: 14 Skipped: 13 (test/inheritance/inherit_methods.lox)
@@ -321,7 +321,7 @@ Passed: 143 Failed: 25 Skipped: 15 (test/this/nested_closure.lox)
 Passed: 144 Failed: 25 Skipped: 15 (test/this/nested_class.lox)
 Passed: 145 Failed: 25 Skipped: 15 (test/string/error_after_multiline.lox)
 FAIL test/string/error_after_multiline.lox
-     Expected runtime error on line 7 but was on line 999.
+     Expected runtime error on line 7 but was on line 0.
 
 
 Passed: 145 Failed: 26 Skipped: 15 (test/string/literals.lox)
@@ -341,7 +341,7 @@ Passed: 158 Failed: 26 Skipped: 15 (test/method/empty_block.lox)
 Passed: 159 Failed: 26 Skipped: 15 (test/method/arity.lox)
 Passed: 160 Failed: 26 Skipped: 15 (test/method/refer_to_name.lox)
 FAIL test/method/refer_to_name.lox
-     Expected runtime error on line 3 but was on line 999.
+     Expected runtime error on line 3 but was on line 0.
 
 
 Passed: 160 Failed: 27 Skipped: 15 (test/method/too_many_arguments.lox)
@@ -349,7 +349,7 @@ Passed: 161 Failed: 27 Skipped: 15 (test/method/print_bound_method.lox)
 Passed: 162 Failed: 27 Skipped: 15 (test/method/missing_arguments.lox)
 Passed: 163 Failed: 27 Skipped: 15 (test/method/not_found.lox)
 FAIL test/method/not_found.lox
-     Expected runtime error on line 3 but was on line 999.
+     Expected runtime error on line 3 but was on line 0.
 
 
 Passed: 163 Failed: 28 Skipped: 15 (test/method/too_many_parameters.lox)
