@@ -24,8 +24,11 @@ pub struct ParseError {
 }
 
 impl ParseError {
-    pub fn new(message: String, loc: Location) -> ParseError {
-        ParseError { message, loc }
+    pub fn new(message: &str, loc: Location) -> ParseError {
+        ParseError {
+            message: message.to_string(),
+            loc,
+        }
     }
 
     pub fn with_message(message: &str) -> ParseError {

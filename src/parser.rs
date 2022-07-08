@@ -303,7 +303,7 @@ impl<'a> Parser<'a> {
         self.state
             .borrow()
             .scanner
-            .error(format!("Error at {}: {}", peeked, message))
+            .error(&format!("Error at {}: {}", peeked, message))
     }
 
     fn add_error(&self, e: error::ParseError) {

@@ -144,7 +144,7 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn error(&self, message: String) -> error::ParseError {
+    pub fn error(&self, message: &str) -> error::ParseError {
         error::ParseError::new(message, self.loc())
     }
 
@@ -209,7 +209,7 @@ impl<'a> Scanner<'a> {
         self.loc.advance_lines(lines);
 
         if self.at_end() {
-            return Err(self.error("Error: Unterminated string.".to_string()));
+            return Err(self.error("Error: Unterminated string."));
         }
         self.advance(); // Consume closing "
 
@@ -258,7 +258,7 @@ impl<'a> Scanner<'a> {
         let lexeme = self.current();
         let parsed_value = lexeme.parse::<f64>();
         if !parsed_value.is_ok() {
-            return Err(self.error(format!("Error parsing numeric literal {}", lexeme)));
+            return Err(self.error(&format!("Error parsing numeric literal {}", lexeme)));
         }
         Ok(Token {
             token_type: TokenType::Number,
@@ -400,9 +400,7 @@ impl<'a> Iterator for Scanner<'a> {
                         } else {
                             self.loc.consume();
                             self.current.start = self.current.end;
-                            return Some(Err(
-                                self.error("Error: Unexpected character.".to_string())
-                            ));
+                            return Some(Err(self.error("Error: Unexpected character.")));
                         }
                     }
                 }
