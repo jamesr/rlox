@@ -1,6 +1,9 @@
-use std::{fmt::Display, ops::Add};
+use std::fmt::Display;
 
-enum OpCode {
+use crate::error;
+
+#[derive(PartialEq, Clone, Copy, Debug)]
+pub enum OpCode {
     Return,
     Constant(usize),
     Negate,
@@ -8,25 +11,56 @@ enum OpCode {
     Subtract,
     Multiply,
     Divide,
+    Nil,
+    True,
+    False,
+    Not,
+    Equal,
+    Greater,
+    Less,
 }
 
-#[derive(PartialEq, Clone, Copy, Debug)]
-enum Value {
+#[derive(PartialEq, PartialOrd, Clone, Debug)]
+pub enum Value {
+    Nil,
+    Bool(bool),
     Number(f64),
+    String(String),
+}
+
+impl Value {
+    fn falsey(&self) -> bool {
+        match self {
+            Value::Nil => true,
+            Value::Bool(b) => !*b,
+            _ => false,
+        }
+    }
 }
 
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Value::Nil => write!(f, "nil"),
+            Value::Bool(b) => write!(f, "{}", b),
             Value::Number(n) => write!(f, "{}", n),
+            Value::String(s) => write!(f, "{}", s),
         }
     }
 }
 
-struct Chunk {
-    code: Vec<OpCode>,
-    constants: Vec<Value>,
-    lines: Vec<usize>,
+pub struct Chunk {
+    pub code: Vec<OpCode>,
+    pub constants: Vec<Value>,
+    locs: Vec<error::Location>,
+}
+
+macro_rules! add_opcode_helper {
+    ($name:ident, $opcode:expr) => {
+        pub fn $name(&mut self, loc: error::Location) {
+            self.add_opcode($opcode, loc);
+        }
+    };
 }
 
 impl Chunk {
@@ -34,45 +68,35 @@ impl Chunk {
         Self {
             code: vec![],
             constants: vec![],
-            lines: vec![],
+            locs: vec![],
         }
     }
 
-    fn add_opcode(&mut self, op: OpCode, line: usize) {
+    fn add_opcode(&mut self, op: OpCode, loc: error::Location) {
         self.code.push(op);
-        self.lines.push(line);
+        self.locs.push(loc);
     }
 
-    pub fn add_return(&mut self, line: usize) {
-        self.add_opcode(OpCode::Return, line);
-    }
-
-    pub fn add_constant(&mut self, v: Value, line: usize) {
-        self.add_opcode(OpCode::Constant(self.constants.len()), line);
+    pub fn add_constant(&mut self, v: Value, loc: error::Location) {
+        self.add_opcode(OpCode::Constant(self.constants.len()), loc);
         self.constants.push(v);
     }
 
-    pub fn add_negate(&mut self, line: usize) {
-        self.add_opcode(OpCode::Negate, line);
-    }
+    add_opcode_helper!(add_return, OpCode::Return);
+    add_opcode_helper!(add_negate, OpCode::Negate);
+    add_opcode_helper!(add_add, OpCode::Add);
+    add_opcode_helper!(add_subtract, OpCode::Subtract);
+    add_opcode_helper!(add_multiply, OpCode::Multiply);
+    add_opcode_helper!(add_divide, OpCode::Divide);
+    add_opcode_helper!(add_nil, OpCode::Nil);
+    add_opcode_helper!(add_true, OpCode::True);
+    add_opcode_helper!(add_false, OpCode::False);
+    add_opcode_helper!(add_not, OpCode::Not);
+    add_opcode_helper!(add_equal, OpCode::Equal);
+    add_opcode_helper!(add_greater, OpCode::Greater);
+    add_opcode_helper!(add_less, OpCode::Less);
 
-    pub fn add_add(&mut self, line: usize) {
-        self.add_opcode(OpCode::Add, line);
-    }
-
-    pub fn add_subtract(&mut self, line: usize) {
-        self.add_opcode(OpCode::Subtract, line);
-    }
-
-    pub fn add_multiply(&mut self, line: usize) {
-        self.add_opcode(OpCode::Multiply, line);
-    }
-
-    pub fn add_divide(&mut self, line: usize) {
-        self.add_opcode(OpCode::Divide, line);
-    }
-
-    fn disassemble(&self) -> Result<(), String> {
+    fn disassemble(&self) -> Result<(), error::RuntimeError> {
         for i in 0..self.code.len() {
             print!("{:0>3} ", i);
             self.disassemble_instruction(i)?;
@@ -80,8 +104,8 @@ impl Chunk {
         Ok(())
     }
 
-    fn disassemble_instruction(&self, i: usize) -> Result<(), String> {
-        print!("{:0>4} ", self.lines[i]);
+    fn disassemble_instruction(&self, i: usize) -> Result<(), error::RuntimeError> {
+        print!("{:0>4} ", self.locs[i].line);
         match &self.code[i] {
             OpCode::Return => println!("return"),
             OpCode::Constant(index) => {
@@ -92,6 +116,13 @@ impl Chunk {
             OpCode::Subtract => println!("subtract"),
             OpCode::Multiply => println!("multiply"),
             OpCode::Divide => println!("divide"),
+            OpCode::Nil => println!("nil"),
+            OpCode::True => println!("true"),
+            OpCode::False => println!("false"),
+            OpCode::Not => println!("not"),
+            OpCode::Equal => println!("equal"),
+            OpCode::Greater => print!("greater"),
+            OpCode::Less => print!("less"),
         }
         Ok(())
     }
@@ -102,6 +133,7 @@ struct Vm<'a> {
     ip: usize,
     stack: Vec<Value>,
     trace: bool,
+    current_loc: error::Location,
 }
 
 impl<'a> Vm<'a> {
@@ -111,6 +143,7 @@ impl<'a> Vm<'a> {
             ip: 0,
             stack: vec![],
             trace: false,
+            current_loc: error::Location::default(),
         }
     }
 
@@ -122,51 +155,113 @@ impl<'a> Vm<'a> {
         self.stack.push(v)
     }
 
-    fn pop(&mut self) -> Value {
-        self.stack.pop().unwrap()
+    fn error(&self, message: &str) -> error::RuntimeError {
+        error::RuntimeError::new(message, self.current_loc.clone())
     }
 
-    fn binary_op_number<F>(&mut self, op: F) -> Result<(), String>
+    fn pop(&mut self) -> Result<Value, error::RuntimeError> {
+        match self.stack.pop() {
+            Some(v) => Ok(v),
+            None => Err(self.error("Pop with empty stack.")),
+        }
+    }
+
+    fn peek(&self) -> Result<&Value, error::RuntimeError> {
+        match self.stack.last() {
+            Some(v) => Ok(v),
+            None => Err(self.error("Peek with empty stack.")),
+        }
+    }
+
+    fn binary_op_number<F>(&mut self, op: F) -> Result<(), error::RuntimeError>
     where
         F: FnOnce(f64, f64) -> f64,
     {
         // The right hand side is at the top of the stack and the left hand side is below.
-        if let Value::Number(rhs) = self.pop() {
-            if let Value::Number(lhs) = self.pop() {
+        if let Value::Number(rhs) = self.pop()? {
+            if let Value::Number(lhs) = self.pop()? {
                 self.push(Value::Number(op(lhs, rhs)));
                 return Ok(());
             }
         }
-        return Err("Invalid types for binary ".to_string());
+        return Err(self.error("Invalid types for binary op."));
     }
 
-    fn run(&mut self, chunk: &'a Chunk) -> Result<Value, String> {
+    fn binary_op_string<F>(&mut self, op: F) -> Result<(), error::RuntimeError>
+    where
+        F: FnOnce(String, String) -> String,
+    {
+        // The right hand side is at the top of the stack and the left hand side is below.
+        if let Value::String(rhs) = self.pop()? {
+            if let Value::String(lhs) = self.pop()? {
+                self.push(Value::String(op(lhs, rhs)));
+                return Ok(());
+            }
+        }
+        return Err(error::RuntimeError::new(
+            "Invalid types for binary op.",
+            self.current_loc.clone(),
+        ));
+    }
+
+    fn run(&mut self, chunk: &'a Chunk) -> Result<Value, error::RuntimeError> {
         self.chunk = Some(chunk);
         loop {
             if self.trace {
                 chunk.disassemble_instruction(self.ip)?;
+                println!();
+                println!("=== stack ===");
                 for v in &self.stack {
                     println!("[ {} ]", v);
                 }
             }
+            self.current_loc = chunk.locs[self.ip].clone();
             match chunk.code[self.ip] {
                 OpCode::Return => {
-                    let value = self.pop();
+                    let value = self.pop()?;
                     return Ok(value);
                 }
                 OpCode::Constant(index) => {
-                    let value = chunk.constants[index];
+                    let value = chunk.constants[index].clone();
                     self.push(value);
                 }
                 OpCode::Negate => {
-                    if let Value::Number(n) = self.pop() {
+                    if let Value::Number(n) = self.pop()? {
                         self.push(Value::Number(-n));
+                    } else {
+                        return Err(self.error("Operand must be a number."));
                     }
                 }
-                OpCode::Add => self.binary_op_number(|lhs, rhs| lhs + rhs)?,
+                OpCode::Add => match self.peek()? {
+                    Value::Number(_) => self.binary_op_number(|lhs, rhs| lhs + rhs),
+                    Value::String(_) => self.binary_op_string(|lhs, rhs| lhs + &rhs),
+                    _ => return Err(self.error("Operands must be two strings or two numbers.")),
+                }?,
                 OpCode::Subtract => self.binary_op_number(|lhs, rhs| lhs - rhs)?,
                 OpCode::Multiply => self.binary_op_number(|lhs, rhs| lhs * rhs)?,
                 OpCode::Divide => self.binary_op_number(|lhs, rhs| lhs / rhs)?,
+                OpCode::Nil => self.push(Value::Nil),
+                OpCode::True => self.push(Value::Bool(true)),
+                OpCode::False => self.push(Value::Bool(false)),
+                OpCode::Not => {
+                    let val = self.pop()?;
+                    self.push(Value::Bool(val.falsey()))
+                }
+                OpCode::Equal => {
+                    let rhs = self.pop()?;
+                    let lhs = self.pop()?;
+                    self.push(Value::Bool(lhs == rhs));
+                }
+                OpCode::Greater => {
+                    let rhs = self.pop()?;
+                    let lhs = self.pop()?;
+                    self.push(Value::Bool(lhs > rhs));
+                }
+                OpCode::Less => {
+                    let rhs = self.pop()?;
+                    let lhs = self.pop()?;
+                    self.push(Value::Bool(lhs < rhs));
+                }
             }
             self.ip = self.ip + 1;
         }
@@ -175,60 +270,108 @@ impl<'a> Vm<'a> {
 
 #[cfg(test)]
 mod tests {
+    use crate::error;
+
     use super::*;
 
     #[test]
-    fn disassemble_return() -> Result<(), String> {
+    fn disassemble_return() -> Result<(), error::Error> {
         let mut chunk = Chunk::new();
-        chunk.add_return(0);
+        chunk.add_return(error::Location::default());
         chunk.disassemble()?;
         Ok(())
     }
 
     #[test]
-    fn disassemble_constant() -> Result<(), String> {
+    fn disassemble_constant() -> Result<(), error::Error> {
         let mut chunk = Chunk::new();
-        chunk.add_constant(Value::Number(4.3), 0);
+        chunk.add_constant(Value::Number(4.3), error::Location::default());
         chunk.disassemble()?;
         Ok(())
     }
 
-    #[test]
-    fn run_constant_and_return() -> Result<(), String> {
-        let mut vm = Vm::new();
-        let mut chunk = Chunk::new();
-        chunk.add_constant(Value::Number(2.4), 0);
-        chunk.add_return(1);
-        vm.enable_tracing();
-        let value = vm.run(&chunk)?;
-        assert_eq!(value, Value::Number(2.4));
-        Ok(())
+    macro_rules! run_test_add_opcode {
+        ($chunk:ident, $opcode:ident, $loc:expr, $param:expr) => {
+            $chunk.$opcode($param, $loc);
+        };
+        ($chunk:ident, $opcode:ident, $loc:expr) => {
+            $chunk.$opcode($loc);
+        };
     }
 
-    #[test]
-    fn run_negate() -> Result<(), String> {
-        let mut vm = Vm::new();
-        let mut chunk = Chunk::new();
-        chunk.add_constant(Value::Number(2.4), 0);
-        chunk.add_negate(1);
-        chunk.add_return(2);
-        assert_eq!(vm.run(&chunk)?, Value::Number(-2.4));
-        Ok(())
+    macro_rules! run_test {
+        ($name:ident, $expected:expr, $($opcode:ident $(=> $param:expr)? ),*) => {
+            #[test]
+            fn $name() -> Result<(), error::Error> {
+                let mut vm = Vm::new();
+                let mut chunk = Chunk::new();
+                let mut loc = error::Location::default();
+                $(
+                    run_test_add_opcode!(chunk, $opcode, loc.clone() $(, $param)?);
+                    loc.line = loc.line + 1;
+                )*
+                let result = vm.run(&chunk);
+                assert_eq!(result, $expected);
+                Ok(())
+            }
+        };
     }
 
-    #[test]
-    fn run_arithmetic() -> Result<(), String> {
-        let mut vm = Vm::new();
-        let mut chunk = Chunk::new();
-        chunk.add_constant(Value::Number(1.2), 1);
-        chunk.add_constant(Value::Number(3.4), 1);
-        chunk.add_add(2);
-        chunk.add_constant(Value::Number(5.6), 3);
-        chunk.add_divide(3);
-        chunk.add_negate(4);
-        chunk.add_return(5);
-        assert_eq!(vm.run(&chunk)?, Value::Number(-4.6 / 5.6));
+    run_test!(
+        run_constant_and_return,
+        Ok(Value::Number(2.4)),
+        add_constant => Value::Number(2.4),
+        add_return
+    );
 
-        Ok(())
-    }
+    run_test!(
+        run_negate,
+        Ok(Value::Number(-2.4)),
+        add_constant => Value::Number(2.4),
+        add_negate,
+        add_return
+    );
+
+    run_test!(
+        run_arithmetic,
+        Ok(Value::Number(-4.6 / 5.6)),
+        add_constant => Value::Number(1.2),
+        add_constant => Value::Number(3.4),
+        add_add,
+        add_constant => Value::Number(5.6),
+        add_divide,
+        add_negate,
+        add_return
+    );
+
+    run_test!(
+        run_add_strings,
+        Ok(Value::String("foobar".to_string())),
+        add_constant => Value::String("foo".to_string()),
+        add_constant => Value::String("bar".to_string()),
+        add_add,
+        add_return
+    );
+
+    run_test!(
+        run_add_number_and_string,
+        Err(error::RuntimeError::new(
+                "Invalid types for binary op.",
+                error::Location { line: 2, col: 0..0 }
+            )),
+        add_constant => Value::String("foo".to_string()),
+        add_constant => Value::Number(1.2),
+        add_add,
+        add_return
+    );
+
+    run_test!(
+        run_greater_than_not,
+        Ok(Value::Bool(true)),
+        add_constant => Value::Number(0.6),
+        add_constant => Value::Number(1.2),
+        add_greater,
+        add_not,
+        add_return
+    );
 }

@@ -5,6 +5,7 @@ use eval::Interpreter;
 
 pub mod ast;
 pub mod class;
+pub mod compiler;
 pub mod env;
 pub mod error;
 pub mod eval;
@@ -33,7 +34,7 @@ fn run(source: &str, interpreter: &mut Interpreter) -> Result<(), error::Error> 
             println!("{}", e);
         }
         return Err(error::Error::Runtime(error::RuntimeError::new(
-            "interpretation failed".to_string(),
+            "interpretation failed",
             error::Location::default(),
         )));
     }
@@ -77,6 +78,10 @@ fn main() {
                 error::Error::Runtime(_) => {
                     _ = write!(std::io::stderr(), "{}\n[line 1]\n", &e);
                     std::process::exit(70);
+                }
+                error::Error::CompileError => {
+                    _ = write!(std::io::stderr(), "compile error\n");
+                    std::process::exit(75);
                 }
             },
         },

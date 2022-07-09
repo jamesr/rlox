@@ -225,10 +225,7 @@ fn truthy(v: &Value) -> bool {
 fn as_number(v: &Value, loc: error::Location) -> Result<f64, RuntimeError> {
     match v {
         Value::Number(n) => Ok(*n),
-        _ => Err(RuntimeError::new(
-            "Operands must be numbers.".to_string(),
-            loc,
-        )),
+        _ => Err(RuntimeError::new("Operands must be numbers.", loc)),
     }
 }
 
@@ -267,7 +264,7 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
             Value::Class(c) => (*c).clone() as Rc<dyn Callable>,
             _ => {
                 return Err(error::RuntimeError::new(
-                    "Can only call functions and classes.".to_string(),
+                    "Can only call functions and classes.",
                     self.ast_loc(c.id()),
                 ))
             }
@@ -275,7 +272,7 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
 
         if args.len() != callable.arity() {
             return Err(error::RuntimeError::new(
-                format!(
+                &format!(
                     "Expected {} arguments but got {}.",
                     callable.arity(),
                     args.len()
@@ -296,7 +293,7 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
         }
 
         Err(error::RuntimeError::new(
-            "Only instances have fields.".to_string(),
+            "Only instances have fields.",
             self.ast_loc(s.id()),
         ))
     }
@@ -308,7 +305,7 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
         }
 
         Err(error::RuntimeError::new(
-            "Only instances have properties.".to_string(),
+            "Only instances have properties.",
             self.ast_loc(g.id()),
         ))
     }
@@ -318,7 +315,7 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
             Some(d) => *d,
             None => {
                 return Err(error::RuntimeError::new(
-                    "'super' not found in locals".to_string(),
+                    "'super' not found in locals",
                     self.ast_loc(s.id()),
                 ));
             }
@@ -338,7 +335,7 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
                 Some(m) => m,
                 None => {
                     return Err(error::RuntimeError::new(
-                        format!("Undefined property '{}'.", &s.name),
+                        &format!("Undefined property '{}'.", &s.name),
                         self.ast_loc(s.id()),
                     ));
                 }
@@ -347,7 +344,7 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
         }
 
         Err(error::RuntimeError::new(
-            "'super' not a a class.".to_string(),
+            "'super' not a a class.",
             self.ast_loc(s.id()),
         ))
     }
@@ -527,7 +524,7 @@ impl<'a> Visitor<ExprResult, StmtResult> for Interpreter {
                 Some(ByAddress(c.class.clone()))
             } else {
                 return Err(error::RuntimeError::new(
-                    "Superclass must be a class.".to_string(),
+                    "Superclass must be a class.",
                     self.ast_loc(c.id()),
                 ));
             }

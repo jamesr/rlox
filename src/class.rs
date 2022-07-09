@@ -77,7 +77,7 @@ impl Instance {
         }
 
         Err(RuntimeError::new(
-            format!("Undefined property '{}'.", name),
+            &format!("Undefined property '{}'.", name),
             loc,
         ))
     }
@@ -102,7 +102,7 @@ impl eval::Callable for Callable {
                 bound_initializer.call(interpreter, args, loc)?;
             } else {
                 return Err(RuntimeError::new(
-                    format!("Failed to bind initializer for '{}'.", &self.class.name),
+                    &format!("Failed to bind initializer for '{}'.", &self.class.name),
                     loc,
                 ));
             }

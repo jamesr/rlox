@@ -2,7 +2,14 @@ use std::ops::Range;
 
 use crate::eval;
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
+pub enum Error {
+    Parse(ParseError),
+    Runtime(RuntimeError),
+    CompileError,
+}
+
+#[derive(Default, Debug, PartialEq)]
 pub struct Location {
     pub line: usize,
     pub col: Range<usize>,
@@ -90,27 +97,27 @@ impl From<std::io::Error> for Error {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum RuntimeError {
     Error((String, Location)),
     Return(eval::Value),
 }
 
 impl RuntimeError {
-    pub fn new(message: String, loc: Location) -> Self {
-        Self::Error((message, loc))
+    pub fn new(message: &str, loc: Location) -> Self {
+        Self::Error((message.to_string(), loc))
     }
 }
 
 impl From<(String, Location)> for RuntimeError {
     fn from(t: (String, Location)) -> Self {
-        Self::new(t.0, t.1)
+        Self::new(&t.0, t.1)
     }
 }
 
 impl From<(&str, Location)> for RuntimeError {
     fn from(t: (&str, Location)) -> Self {
-        Self::new(t.0.to_string(), t.1)
+        Self::new(t.0, t.1)
     }
 }
 
@@ -121,12 +128,6 @@ impl std::fmt::Display for RuntimeError {
             RuntimeError::Return(v) => write!(f, "return {}", v),
         }
     }
-}
-
-#[derive(Debug)]
-pub enum Error {
-    Parse(ParseError),
-    Runtime(RuntimeError),
 }
 
 impl From<ParseError> for Error {
@@ -150,6 +151,7 @@ impl std::fmt::Display for Error {
         match self {
             Error::Parse(p) => write!(f, "{}", p.to_string()),
             Error::Runtime(r) => write!(f, "{}", r),
+            Error::CompileError => write!(f, "compile error"),
         }
     }
 }
