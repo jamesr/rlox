@@ -97,7 +97,7 @@ impl eval::Callable for Callable {
     ) -> Result<Value, RuntimeError> {
         let instance = Value::Instance(Rc::new(RefCell::new(Instance::new(self.class.clone()))));
 
-        if let Some(initializer) = self.class.methods.get("init") {
+        if let Some(initializer) = self.class.find_method("init") {
             if let Value::Callable(bound_initializer) = initializer.bind(instance.clone()) {
                 bound_initializer.call(interpreter, args, loc)?;
             } else {
@@ -112,7 +112,7 @@ impl eval::Callable for Callable {
     }
 
     fn arity(&self) -> usize {
-        match self.class.methods.get("init") {
+        match self.class.find_method("init") {
             Some(initializer) => initializer.arity(),
             None => 0,
         }

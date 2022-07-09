@@ -87,7 +87,7 @@ impl<'a> fmt::Display for Token<'a> {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 struct Loc {
     lines: Range<usize>, // lines of the token being scanned
     cols: Range<usize>,  // columns of the token being scanned in chars
