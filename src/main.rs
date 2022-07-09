@@ -13,6 +13,7 @@ pub mod parser;
 pub mod resolver;
 pub mod scanner;
 pub mod visitor;
+pub mod vm;
 
 fn run(source: &str, interpreter: &mut Interpreter) -> Result<(), error::Error> {
     let scanner = scanner::Scanner::new(source);
