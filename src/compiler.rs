@@ -34,7 +34,13 @@ impl Compiler {
                     self.compile_stmt(&*bs, chunk)?;
                 }
             }
-            ast::Stmt::Var(_) => todo!(),
+            ast::Stmt::Var(v) => {
+                match &v.initializer {
+                    Some(e) => self.compile_expr(e, chunk)?,
+                    None => chunk.add_nil(loc.clone()),
+                }
+                chunk.add_define_global(&v.name, loc);
+            }
             ast::Stmt::If(_) => todo!(),
             ast::Stmt::While(_) => todo!(),
             ast::Stmt::Function(_) => todo!(),
@@ -108,6 +114,13 @@ impl Compiler {
                         )));
                     }
                 }
+            }
+            ast::Expr::Variable(v) => {
+                chunk.add_get_global(&v.name, loc);
+            }
+            ast::Expr::Assign(a) => {
+                self.compile_expr(&a.value, chunk)?;
+                chunk.add_set_global(&a.name, loc);
             }
             _ => {
                 return Err(error::Error::Parse(ParseError::new(

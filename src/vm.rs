@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display};
 
 use crate::error;
 
@@ -19,6 +19,9 @@ pub enum OpCode {
     Greater,
     Less,
     Print,
+    GetGlobal(usize),
+    DefineGlobal(usize),
+    SetGlobal(usize),
 }
 
 #[derive(PartialEq, PartialOrd, Clone, Debug)]
@@ -83,6 +86,21 @@ impl Chunk {
         self.constants.push(v);
     }
 
+    pub fn add_get_global(&mut self, name: &str, loc: error::Location) {
+        self.add_opcode(OpCode::GetGlobal(self.constants.len()), loc);
+        self.constants.push(Value::String(name.to_string()));
+    }
+
+    pub fn add_define_global(&mut self, name: &str, loc: error::Location) {
+        self.add_opcode(OpCode::DefineGlobal(self.constants.len()), loc);
+        self.constants.push(Value::String(name.to_string()));
+    }
+
+    pub fn add_set_global(&mut self, name: &str, loc: error::Location) {
+        self.add_opcode(OpCode::SetGlobal(self.constants.len()), loc);
+        self.constants.push(Value::String(name.to_string()));
+    }
+
     add_opcode_helper!(add_return, OpCode::Return);
     add_opcode_helper!(add_negate, OpCode::Negate);
     add_opcode_helper!(add_add, OpCode::Add);
@@ -126,6 +144,24 @@ impl Chunk {
             OpCode::Greater => print!("greater"),
             OpCode::Less => print!("less"),
             OpCode::Print => print!("print"),
+            OpCode::GetGlobal(index) => {
+                println!(
+                    "get global index {} value {}",
+                    index, self.constants[*index]
+                )
+            }
+            OpCode::DefineGlobal(index) => {
+                println!(
+                    "define global index {} value {}",
+                    index, self.constants[*index]
+                )
+            }
+            OpCode::SetGlobal(index) => {
+                println!(
+                    "set global index {} value {}",
+                    index, self.constants[*index]
+                )
+            }
         }
         Ok(())
     }
@@ -136,6 +172,7 @@ pub struct Vm {
     stack: Vec<Value>,
     trace: bool,
     current_loc: error::Location,
+    globals: HashMap<String, Value>,
 }
 
 impl Vm {
@@ -145,6 +182,7 @@ impl Vm {
             stack: vec![],
             trace: false,
             current_loc: error::Location::default(),
+            globals: HashMap::new(),
         }
     }
 
@@ -216,6 +254,10 @@ impl Vm {
                 for v in &self.stack {
                     println!("[ {} ]", v);
                 }
+                println!("=== globals ===");
+                for (name, value) in &self.globals {
+                    println!("\"{}\": -> {}", &name, &value);
+                }
             }
             self.current_loc = chunk.locs[self.ip].clone();
             match chunk.code[self.ip] {
@@ -267,6 +309,43 @@ impl Vm {
                 OpCode::Print => {
                     let value = self.pop()?;
                     println!("{:?}", value);
+                }
+                OpCode::GetGlobal(index) => {
+                    let name_constant = chunk.constants[index].clone();
+                    if let Value::String(name) = name_constant {
+                        let value = match self.globals.get(&name) {
+                            Some(v) => v,
+                            None => {
+                                return Err(self.error(&format!("Undefined variable {}", &name)));
+                            }
+                        };
+                        self.push(value.clone());
+                    } else {
+                        return Err(self.error("global name must be string"));
+                    }
+                }
+                OpCode::DefineGlobal(index) => {
+                    let name_constant = chunk.constants[index].clone();
+                    if let Value::String(name) = name_constant {
+                        let value = self.pop()?;
+                        self.globals.insert(name, value);
+                    } else {
+                        return Err(self.error("global name must be string"));
+                    }
+                }
+                OpCode::SetGlobal(index) => {
+                    let name_constant = chunk.constants[index].clone();
+                    if let Value::String(name) = name_constant {
+                        let value = self.pop()?;
+                        match self.globals.get_mut(&name) {
+                            Some(v) => *v = value,
+                            None => {
+                                return Err(self.error(&format!("Undefined variable '{}'", name)));
+                            }
+                        }
+                    } else {
+                        return Err(self.error("global name must be string"));
+                    }
                 }
             }
             self.ip = self.ip + 1;
