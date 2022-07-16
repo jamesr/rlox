@@ -19,6 +19,13 @@ impl Compiler {
             None => error::Location::default(),
         };
         match expr {
+            ast::Expr::Unary(u) => match &u.operator {
+                ast::Operator::Minus => chunk.add_negate(loc),
+                ast::Operator::Bang => chunk.add_not(loc),
+                _ => {
+                    return Err(error::Error::CompileError);
+                }
+            },
             ast::Expr::Literal(l) => match &l.value {
                 ast::LiteralValue::Number(n) => chunk.add_constant(vm::Value::Number(*n), loc),
                 ast::LiteralValue::String(s) => {
@@ -40,7 +47,6 @@ impl Compiler {
                     ast::Operator::Plus => chunk.add_add(loc),
                     ast::Operator::Slash => chunk.add_divide(loc),
                     ast::Operator::Star => chunk.add_multiply(loc),
-                    ast::Operator::Bang => chunk.add_not(loc),
                     ast::Operator::BangEqual => {
                         chunk.add_equal(loc.clone());
                         chunk.add_not(loc);
@@ -56,7 +62,6 @@ impl Compiler {
                         chunk.add_greater(loc.clone());
                         chunk.add_not(loc);
                     }
-
                     _ => {
                         return Err(error::Error::CompileError);
                     }
