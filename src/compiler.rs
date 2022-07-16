@@ -1,6 +1,10 @@
-use crate::{ast, error, parser, vm};
+use crate::{
+    ast,
+    error::{self, ParseError},
+    parser, vm,
+};
 
-struct Compiler {
+pub struct Compiler {
     location_table: parser::LocationTable,
 }
 
@@ -9,7 +13,37 @@ impl Compiler {
         Self { location_table }
     }
 
-    fn compile_expr(
+    pub fn compile_stmt(
+        &mut self,
+        stmt: &ast::Stmt,
+        chunk: &mut vm::Chunk,
+    ) -> Result<(), error::Error> {
+        let loc = match self.location_table.get(&stmt.id()) {
+            Some(loc) => loc.clone(),
+            None => error::Location::default(),
+        };
+        match stmt {
+            ast::Stmt::Expr(e) => self.compile_expr(&*e.expr, chunk)?,
+            ast::Stmt::Print(p) => {
+                self.compile_expr(&p.expr, chunk)?;
+                chunk.add_print(loc);
+            }
+            ast::Stmt::Return(_) => chunk.add_return(loc),
+            ast::Stmt::Block(b) => {
+                for bs in &b.stmts {
+                    self.compile_stmt(&*bs, chunk)?;
+                }
+            }
+            ast::Stmt::Var(_) => todo!(),
+            ast::Stmt::If(_) => todo!(),
+            ast::Stmt::While(_) => todo!(),
+            ast::Stmt::Function(_) => todo!(),
+            ast::Stmt::Class(_) => todo!(),
+        }
+        Ok(())
+    }
+
+    pub fn compile_expr(
         &mut self,
         expr: &ast::Expr,
         chunk: &mut vm::Chunk,
@@ -19,21 +53,26 @@ impl Compiler {
             None => error::Location::default(),
         };
         match expr {
-            ast::Expr::Unary(u) => match &u.operator {
-                ast::Operator::Minus => chunk.add_negate(loc),
-                ast::Operator::Bang => chunk.add_not(loc),
-                _ => {
-                    return Err(error::Error::CompileError);
+            ast::Expr::Unary(u) => {
+                self.compile_expr(&u.right, chunk)?;
+                match &u.operator {
+                    ast::Operator::Minus => chunk.add_negate(loc),
+                    ast::Operator::Bang => chunk.add_not(loc),
+                    _ => {
+                        return Err(error::Error::Parse(ParseError::new(
+                            "unknown unary operator",
+                            loc,
+                        )));
+                    }
                 }
-            },
+            }
             ast::Expr::Literal(l) => match &l.value {
                 ast::LiteralValue::Number(n) => chunk.add_constant(vm::Value::Number(*n), loc),
                 ast::LiteralValue::String(s) => {
                     chunk.add_constant(vm::Value::String(s.clone()), loc)
                 }
-                _ => {
-                    return Err(error::Error::CompileError);
-                }
+                ast::LiteralValue::Bool(b) => chunk.add_constant(vm::Value::Bool(*b), loc),
+                ast::LiteralValue::Nil => chunk.add_constant(vm::Value::Nil, loc),
             },
             ast::Expr::Binary(b) => {
                 self.compile_expr(&b.left, chunk)?;
@@ -63,12 +102,18 @@ impl Compiler {
                         chunk.add_not(loc);
                     }
                     _ => {
-                        return Err(error::Error::CompileError);
+                        return Err(error::Error::Parse(ParseError::new(
+                            "unknown binary operator",
+                            loc,
+                        )));
                     }
                 }
             }
             _ => {
-                return Err(error::Error::CompileError);
+                return Err(error::Error::Parse(ParseError::new(
+                    "unknown expression kind",
+                    loc,
+                )));
             }
         }
         Ok(())
@@ -101,6 +146,28 @@ mod tests {
         ast::Expr::literal_number(3.4),
         [vm::OpCode::Constant(0)],
         [vm::Value::Number(3.4)]
+    );
+
+    compile_test!(
+        compile_negate_number,
+        ast::Expr::unary(
+            ast::Operator::Minus,
+            Box::new(ast::Expr::literal_number(1.2)),
+        ),
+        // - 1.2
+        [vm::OpCode::Constant(0), vm::OpCode::Negate],
+        [vm::Value::Number(1.2)]
+    );
+
+    compile_test!(
+        compile_not_boolean,
+        ast::Expr::unary(
+            ast::Operator::Bang,
+            Box::new(ast::Expr::literal_bool(false)),
+        ),
+        // - 1.2
+        [vm::OpCode::Constant(0), vm::OpCode::Not],
+        [vm::Value::Bool(false)]
     );
 
     compile_test!(

@@ -17,7 +17,7 @@ pub mod scanner;
 pub mod visitor;
 pub mod vm;
 
-fn run(source: &str, interpreter: &mut Interpreter) -> Result<(), error::Error> {
+fn run_interpreted(source: &str, interpreter: &mut Interpreter) -> Result<(), error::Error> {
     let scanner = scanner::Scanner::new(source);
     let mut parser = parser::Parser::new(scanner);
     let stmts = match parser.parse() {
@@ -42,16 +42,43 @@ fn run(source: &str, interpreter: &mut Interpreter) -> Result<(), error::Error> 
     Ok(())
 }
 
+fn run_vm(source: &str, vm: &mut vm::Vm) -> Result<(), error::Error> {
+    let scanner = scanner::Scanner::new(source);
+    let mut parser = parser::Parser::new(scanner);
+    let stmts = match parser.parse() {
+        Ok(s) => s,
+        Err(v) => {
+            return Err(error::convert_parse(&v));
+        }
+    };
+    let location_table = parser.take_location_table();
+    // TODO: Teach resolver to populate a HashMap<u64, usize> and then pass that
+    // to the interpreter / VM to break the resolver<->interpreter dependency.
+    //let mut resolver = resolver::Resolver::new(interpreter, &location_table);
+    //resolver.resolve(&stmts)?;
+    let mut compiler = compiler::Compiler::new(location_table);
+    let mut chunk = vm::Chunk::new();
+    for stmt in stmts {
+        compiler.compile_stmt(&*stmt, &mut chunk)?;
+    }
+    chunk.add_return(error::Location::default());
+    chunk.disassemble()?;
+
+    let result = vm.run(chunk)?;
+    println!("statements evaluted to {:?}", result);
+    Ok(())
+}
+
 fn run_file(filename: &str) -> Result<(), error::Error> {
     let mut file = File::open(filename)?;
     let mut contents = String::new();
     let mut interpreter = Interpreter::new();
     file.read_to_string(&mut contents)?;
-    run(&contents, &mut interpreter)?;
+    run_interpreted(&contents, &mut interpreter)?;
     Ok(())
 }
 
-fn run_prompt() -> Result<(), error::Error> {
+fn run_prompt_interpreter() -> Result<(), error::Error> {
     let mut interpreter = Interpreter::new();
     loop {
         print!("> ");
@@ -61,7 +88,24 @@ fn run_prompt() -> Result<(), error::Error> {
         if buffer.is_empty() {
             return Ok(());
         }
-        if let Err(e) = run(&buffer, &mut interpreter) {
+        if let Err(e) = run_interpreted(&buffer, &mut interpreter) {
+            println!("error: {}", e);
+        }
+    }
+}
+
+fn run_prompt_vm() -> Result<(), error::Error> {
+    let mut vm = vm::Vm::new();
+    vm.enable_tracing();
+    loop {
+        print!("> ");
+        io::stdout().flush()?;
+        let mut buffer = String::new();
+        io::stdin().read_line(&mut buffer)?;
+        if buffer.is_empty() {
+            return Ok(());
+        }
+        if let Err(e) = run_vm(&buffer, &mut vm) {
             println!("error: {}", e);
         }
     }
@@ -80,13 +124,9 @@ fn main() {
                     _ = write!(std::io::stderr(), "{}\n[line 1]\n", &e);
                     std::process::exit(70);
                 }
-                error::Error::CompileError => {
-                    _ = write!(std::io::stderr(), "compile error\n");
-                    std::process::exit(75);
-                }
             },
         },
-        1 => run_prompt().unwrap(),
+        1 => run_prompt_vm().unwrap(),
         _ => println!("Usage: rlox [script]"),
     }
 }

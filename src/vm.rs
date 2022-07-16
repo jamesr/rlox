@@ -18,6 +18,7 @@ pub enum OpCode {
     Equal,
     Greater,
     Less,
+    Print,
 }
 
 #[derive(PartialEq, PartialOrd, Clone, Debug)]
@@ -95,8 +96,9 @@ impl Chunk {
     add_opcode_helper!(add_equal, OpCode::Equal);
     add_opcode_helper!(add_greater, OpCode::Greater);
     add_opcode_helper!(add_less, OpCode::Less);
+    add_opcode_helper!(add_print, OpCode::Print);
 
-    fn disassemble(&self) -> Result<(), error::RuntimeError> {
+    pub fn disassemble(&self) -> Result<(), error::RuntimeError> {
         for i in 0..self.code.len() {
             print!("{:0>3} ", i);
             self.disassemble_instruction(i)?;
@@ -123,23 +125,22 @@ impl Chunk {
             OpCode::Equal => println!("equal"),
             OpCode::Greater => print!("greater"),
             OpCode::Less => print!("less"),
+            OpCode::Print => print!("print"),
         }
         Ok(())
     }
 }
 
-struct Vm<'a> {
-    chunk: Option<&'a Chunk>,
+pub struct Vm {
     ip: usize,
     stack: Vec<Value>,
     trace: bool,
     current_loc: error::Location,
 }
 
-impl<'a> Vm<'a> {
+impl Vm {
     pub fn new() -> Self {
         Self {
-            chunk: None,
             ip: 0,
             stack: vec![],
             trace: false,
@@ -147,7 +148,7 @@ impl<'a> Vm<'a> {
         }
     }
 
-    fn enable_tracing(&mut self) {
+    pub fn enable_tracing(&mut self) {
         self.trace = true;
     }
 
@@ -204,10 +205,11 @@ impl<'a> Vm<'a> {
         ));
     }
 
-    fn run(&mut self, chunk: &'a Chunk) -> Result<Value, error::RuntimeError> {
-        self.chunk = Some(chunk);
+    pub fn run(&mut self, chunk: Chunk) -> Result<Value, error::RuntimeError> {
+        self.ip = 0;
         loop {
             if self.trace {
+                println!("=== instruction ===");
                 chunk.disassemble_instruction(self.ip)?;
                 println!();
                 println!("=== stack ===");
@@ -262,6 +264,10 @@ impl<'a> Vm<'a> {
                     let lhs = self.pop()?;
                     self.push(Value::Bool(lhs < rhs));
                 }
+                OpCode::Print => {
+                    let value = self.pop()?;
+                    println!("{:?}", value);
+                }
             }
             self.ip = self.ip + 1;
         }
@@ -310,7 +316,7 @@ mod tests {
                     run_test_add_opcode!(chunk, $opcode, loc.clone() $(, $param)?);
                     loc.line = loc.line + 1;
                 )*
-                let result = vm.run(&chunk);
+                let result = vm.run(chunk);
                 assert_eq!(result, $expected);
                 Ok(())
             }

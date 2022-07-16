@@ -6,7 +6,6 @@ use crate::eval;
 pub enum Error {
     Parse(ParseError),
     Runtime(RuntimeError),
-    CompileError,
 }
 
 #[derive(Default, Debug, PartialEq)]
@@ -151,7 +150,6 @@ impl std::fmt::Display for Error {
         match self {
             Error::Parse(p) => write!(f, "{}", p.to_string()),
             Error::Runtime(r) => write!(f, "{}", r),
-            Error::CompileError => write!(f, "compile error"),
         }
     }
 }
