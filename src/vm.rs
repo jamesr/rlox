@@ -388,6 +388,9 @@ impl Vm {
                 }
             }
             self.ip = self.ip + 1;
+            if self.ip == chunk.code.len() {
+                return Ok(Value::Nil);
+            }
         }
     }
 }

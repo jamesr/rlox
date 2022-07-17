@@ -61,8 +61,6 @@ fn run_vm(source: &str, vm: &mut vm::Vm) -> Result<(), error::Error> {
     for stmt in stmts {
         compiler.compile_stmt(&*stmt, &mut chunk)?;
     }
-    // TODO - Exit the VM somehow
-    chunk.add_return(error::Location::default());
     //chunk.disassemble()?;
 
     let result = vm.run(chunk)?;
