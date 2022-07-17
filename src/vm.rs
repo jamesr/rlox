@@ -22,6 +22,9 @@ pub enum OpCode {
     GetGlobal(usize),
     DefineGlobal(usize),
     SetGlobal(usize),
+    JumpIfFalse(i16),
+    Jump(i16),
+    Pop,
 }
 
 #[derive(PartialEq, PartialOrd, Clone, Debug)]
@@ -101,6 +104,27 @@ impl Chunk {
         self.constants.push(Value::String(name.to_string()));
     }
 
+    pub fn add_jump(&mut self, op: OpCode, loc: error::Location) -> usize {
+        self.add_opcode(op, loc);
+        self.code.len() - 1
+    }
+
+    pub fn patch_jump(&mut self, offset: usize) {
+        let code_len = self.code.len();
+        let jump_opcode = self.code[offset];
+        let relative_offset = i16::checked_sub(code_len as i16 - 1, offset as i16).unwrap();
+        match jump_opcode {
+            OpCode::JumpIfFalse(_) => self.code[offset] = OpCode::JumpIfFalse(relative_offset),
+            OpCode::Jump(_) => self.code[offset] = OpCode::Jump(relative_offset),
+            _ => {
+                panic!(
+                    "attempted to patch non-jump opcode {:?} at offset {}",
+                    jump_opcode, offset
+                );
+            }
+        }
+    }
+
     add_opcode_helper!(add_return, OpCode::Return);
     add_opcode_helper!(add_negate, OpCode::Negate);
     add_opcode_helper!(add_add, OpCode::Add);
@@ -115,6 +139,7 @@ impl Chunk {
     add_opcode_helper!(add_greater, OpCode::Greater);
     add_opcode_helper!(add_less, OpCode::Less);
     add_opcode_helper!(add_print, OpCode::Print);
+    add_opcode_helper!(add_pop, OpCode::Pop);
 
     pub fn disassemble(&self) -> Result<(), error::RuntimeError> {
         for i in 0..self.code.len() {
@@ -162,6 +187,9 @@ impl Chunk {
                     index, self.constants[*index]
                 )
             }
+            OpCode::JumpIfFalse(offset) => println!("jump if false {}", offset),
+            OpCode::Jump(offset) => println!("jump {}", offset),
+            OpCode::Pop => println!("pop"),
         }
         Ok(())
     }
@@ -347,6 +375,17 @@ impl Vm {
                         return Err(self.error("global name must be string"));
                     }
                 }
+                OpCode::JumpIfFalse(offset) => {
+                    if self.peek()?.falsey() {
+                        self.ip = (self.ip as i16).checked_add(offset).unwrap() as usize;
+                    }
+                }
+                OpCode::Jump(offset) => {
+                    self.ip = (self.ip as i16).checked_add(offset).unwrap() as usize;
+                }
+                OpCode::Pop => {
+                    self.pop()?;
+                }
             }
             self.ip = self.ip + 1;
         }
@@ -376,6 +415,9 @@ mod tests {
     }
 
     macro_rules! run_test_add_opcode {
+        ($chunk:ident, patch_jump, $_loc:expr, $param:expr) => {
+            $chunk.patch_jump($param)
+        };
         ($chunk:ident, $opcode:ident, $loc:expr, $param:expr) => {
             $chunk.$opcode($param, $loc);
         };
@@ -389,12 +431,14 @@ mod tests {
             #[test]
             fn $name() -> Result<(), error::Error> {
                 let mut vm = Vm::new();
+                //vm.enable_tracing();
                 let mut chunk = Chunk::new();
                 let mut loc = error::Location::default();
                 $(
                     run_test_add_opcode!(chunk, $opcode, loc.clone() $(, $param)?);
                     loc.line = loc.line + 1;
                 )*
+                //chunk.disassemble();
                 let result = vm.run(chunk);
                 assert_eq!(result, $expected);
                 Ok(())
@@ -458,5 +502,19 @@ mod tests {
         add_greater,
         add_not,
         add_return
+    );
+
+    run_test!(
+        run_jump_if_false,
+        Ok(Value::Number(1.0)),
+        add_constant => Value::Number(1.0),
+        add_constant => Value::Bool(false),
+        add_jump => OpCode::JumpIfFalse(3),
+        add_pop, // Pop the conditional in "then" branch.
+        add_constant => Value::Number(2.0),
+        add_jump => OpCode::Jump(1), // Jump over "else" branch.
+        add_pop, // Pop the conditional in "else" branch.
+        add_return
+
     );
 }

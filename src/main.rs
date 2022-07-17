@@ -69,12 +69,21 @@ fn run_vm(source: &str, vm: &mut vm::Vm) -> Result<(), error::Error> {
     Ok(())
 }
 
-fn run_file(filename: &str) -> Result<(), error::Error> {
+fn run_file_interpreter(filename: &str) -> Result<(), error::Error> {
     let mut file = File::open(filename)?;
     let mut contents = String::new();
     let mut interpreter = Interpreter::new();
     file.read_to_string(&mut contents)?;
     run_interpreted(&contents, &mut interpreter)?;
+    Ok(())
+}
+
+fn run_file_vm(filename: &str) -> Result<(), error::Error> {
+    let mut file = File::open(filename)?;
+    let mut contents = String::new();
+    let mut vm = vm::Vm::new();
+    file.read_to_string(&mut contents)?;
+    run_vm(&contents, &mut vm)?;
     Ok(())
 }
 
@@ -113,7 +122,7 @@ fn run_prompt_vm() -> Result<(), error::Error> {
 
 fn main() {
     match std::env::args().len() {
-        2 => match run_file(&std::env::args().nth(1).unwrap()) {
+        2 => match run_file_vm(&std::env::args().nth(1).unwrap()) {
             Ok(_) => {}
             Err(e) => match e {
                 error::Error::Parse(_) => {
