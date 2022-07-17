@@ -336,7 +336,7 @@ impl Vm {
                 }
                 OpCode::Print => {
                     let value = self.pop()?;
-                    println!("{:?}", value);
+                    println!("{}", value);
                 }
                 OpCode::GetGlobal(index) => {
                     let name_constant = chunk.constants[index].clone();
