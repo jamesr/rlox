@@ -139,6 +139,32 @@ impl Compiler {
                 self.compile_expr(&a.value, chunk)?;
                 chunk.add_set_global(&a.name, loc);
             }
+            ast::Expr::Logical(l) => match l.operator {
+                ast::Operator::And => {
+                    self.compile_expr(&l.left, chunk)?;
+                    let end_jump = chunk.add_jump(vm::OpCode::JumpIfFalse(i16::MAX), loc.clone());
+                    chunk.add_pop(loc.clone());
+
+                    self.compile_expr(&l.right, chunk)?;
+                    chunk.patch_jump(end_jump);
+                }
+                ast::Operator::Or => {
+                    self.compile_expr(&l.left, chunk)?;
+                    chunk.add_jump(vm::OpCode::JumpIfFalse(1), loc.clone());
+                    let end_jump = chunk.add_jump(vm::OpCode::Jump(i16::MAX), loc.clone());
+
+                    chunk.add_pop(loc.clone());
+
+                    self.compile_expr(&l.right, chunk)?;
+                    chunk.patch_jump(end_jump);
+                }
+                _ => {
+                    return Err(error::Error::Parse(ParseError::new(
+                        &format!("Invalid logical operator {:?}.", l.operator),
+                        loc,
+                    )));
+                }
+            },
             _ => {
                 return Err(error::Error::Parse(ParseError::new(
                     "unknown expression kind",
@@ -263,6 +289,39 @@ mod tests {
             vm::OpCode::Not
         ],
         [vm::Value::Number(2.1), vm::Value::Number(4.2)]
+    );
+
+    compile_expr_test!(
+        compile_logical_and,
+        ast::Expr::logical(
+            Box::new(ast::Expr::literal_bool(true)),
+            ast::Operator::And,
+            Box::new(ast::Expr::literal_bool(false))
+        ),
+        [
+            vm::OpCode::Constant(0),
+            vm::OpCode::JumpIfFalse(2),
+            vm::OpCode::Pop,
+            vm::OpCode::Constant(1)
+        ],
+        [vm::Value::Bool(true), vm::Value::Bool(false)]
+    );
+
+    compile_expr_test!(
+        compile_logical_or,
+        ast::Expr::logical(
+            Box::new(ast::Expr::literal_bool(true)),
+            ast::Operator::Or,
+            Box::new(ast::Expr::literal_bool(false))
+        ),
+        [
+            vm::OpCode::Constant(0),
+            vm::OpCode::JumpIfFalse(1),
+            vm::OpCode::Jump(2),
+            vm::OpCode::Pop,
+            vm::OpCode::Constant(1)
+        ],
+        [vm::Value::Bool(true), vm::Value::Bool(false)]
     );
 
     macro_rules! compile_stmts_test {
