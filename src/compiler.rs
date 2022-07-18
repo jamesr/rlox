@@ -28,7 +28,14 @@ impl Compiler {
                 self.compile_expr(&p.expr, chunk)?;
                 chunk.add_print(loc);
             }
-            ast::Stmt::Return(_) => chunk.add_return(loc),
+            ast::Stmt::Return(r) => {
+                if let Some(value) = &r.value {
+                    self.compile_expr(&value, chunk)?;
+                } else {
+                    chunk.add_nil(loc.clone());
+                }
+                chunk.add_return(loc);
+            }
             ast::Stmt::Block(b) => {
                 for bs in &b.stmts {
                     self.compile_stmt(&*bs, chunk)?;
@@ -52,14 +59,26 @@ impl Compiler {
                 let else_offset = chunk.add_jump(vm::OpCode::Jump(i16::MAX), loc.clone());
 
                 chunk.patch_jump(then_offset);
-                chunk.add_pop(loc.clone());
+                chunk.add_pop(loc);
 
                 if let Some(else_branch) = &i.else_branch {
                     self.compile_stmt(else_branch, chunk)?;
                 }
                 chunk.patch_jump(else_offset);
             }
-            ast::Stmt::While(_) => todo!(),
+            ast::Stmt::While(w) => {
+                let loop_start = chunk.current_code_offset();
+                self.compile_expr(&&w.condition, chunk)?;
+                let end_jump = chunk.add_jump(vm::OpCode::JumpIfFalse(i16::MAX), loc.clone());
+                chunk.add_pop(loc.clone());
+
+                self.compile_stmt(&*w.body, chunk)?;
+                let loop_len = (chunk.current_code_offset() - loop_start + 1) as i16;
+                chunk.add_jump(vm::OpCode::Jump(-loop_len), loc.clone());
+
+                chunk.patch_jump(end_jump);
+                chunk.add_pop(loc);
+            }
             ast::Stmt::Function(_) => todo!(),
             ast::Stmt::Class(_) => todo!(),
         }
@@ -94,8 +113,11 @@ impl Compiler {
                 ast::LiteralValue::String(s) => {
                     chunk.add_constant(vm::Value::String(s.clone()), loc)
                 }
-                ast::LiteralValue::Bool(b) => chunk.add_constant(vm::Value::Bool(*b), loc),
-                ast::LiteralValue::Nil => chunk.add_constant(vm::Value::Nil, loc),
+                ast::LiteralValue::Bool(b) => match b {
+                    true => chunk.add_true(loc),
+                    false => chunk.add_false(loc),
+                },
+                ast::LiteralValue::Nil => chunk.add_nil(loc),
             },
             ast::Expr::Binary(b) => {
                 self.compile_expr(&b.left, chunk)?;
@@ -222,8 +244,8 @@ mod tests {
             Box::new(ast::Expr::literal_bool(false)),
         ),
         // - 1.2
-        [vm::OpCode::Constant(0), vm::OpCode::Not],
-        [vm::Value::Bool(false)]
+        [vm::OpCode::False, vm::OpCode::Not],
+        []
     );
 
     compile_expr_test!(
@@ -299,12 +321,12 @@ mod tests {
             Box::new(ast::Expr::literal_bool(false))
         ),
         [
-            vm::OpCode::Constant(0),
+            vm::OpCode::True,
             vm::OpCode::JumpIfFalse(2),
             vm::OpCode::Pop,
-            vm::OpCode::Constant(1)
+            vm::OpCode::False
         ],
-        [vm::Value::Bool(true), vm::Value::Bool(false)]
+        []
     );
 
     compile_expr_test!(
@@ -315,13 +337,13 @@ mod tests {
             Box::new(ast::Expr::literal_bool(false))
         ),
         [
-            vm::OpCode::Constant(0),
+            vm::OpCode::True,
             vm::OpCode::JumpIfFalse(1),
             vm::OpCode::Jump(2),
             vm::OpCode::Pop,
-            vm::OpCode::Constant(1)
+            vm::OpCode::False
         ],
-        [vm::Value::Bool(true), vm::Value::Bool(false)]
+        []
     );
 
     macro_rules! compile_stmts_test {
@@ -350,6 +372,21 @@ mod tests {
     );
 
     compile_stmts_test!(
+        compile_return_nothing,
+        [ast::Stmt::return_stmt(None)],
+        [vm::OpCode::Nil, vm::OpCode::Return],
+        []
+    );
+
+    compile_stmts_test!(
+        compile_return_literal,
+        [ast::Stmt::return_stmt(Some(Box::new(
+            ast::Expr::literal_number(1.2)
+        )))],
+        [vm::OpCode::Constant(0), vm::OpCode::Return],
+        [vm::Value::Number(1.2)]
+    );
+    compile_stmts_test!(
         compile_if_literal,
         [ast::Stmt::if_stmt(
             Box::new(ast::Expr::literal_bool(true)),
@@ -357,14 +394,15 @@ mod tests {
             None
         )],
         [
-            vm::OpCode::Constant(0),
-            vm::OpCode::JumpIfFalse(3),
+            vm::OpCode::True,
+            vm::OpCode::JumpIfFalse(4),
             vm::OpCode::Pop,
+            vm::OpCode::Nil,
             vm::OpCode::Return,
             vm::OpCode::Jump(1),
             vm::OpCode::Pop
         ],
-        [vm::Value::Bool(true)]
+        []
     );
 
     compile_stmts_test!(
@@ -375,14 +413,34 @@ mod tests {
             Some(Box::new(ast::Stmt::return_stmt(None)))
         )],
         [
-            vm::OpCode::Constant(0),
-            vm::OpCode::JumpIfFalse(3),
+            vm::OpCode::True,
+            vm::OpCode::JumpIfFalse(4),
             vm::OpCode::Pop,
+            vm::OpCode::Nil,
             vm::OpCode::Return,
-            vm::OpCode::Jump(2),
+            vm::OpCode::Jump(3),
             vm::OpCode::Pop,
+            vm::OpCode::Nil,
             vm::OpCode::Return
         ],
-        [vm::Value::Bool(true)]
+        []
+    );
+
+    compile_stmts_test!(
+        compile_while_else_literal,
+        [ast::Stmt::while_stmt(
+            Box::new(ast::Expr::literal_bool(true)),
+            Box::new(ast::Stmt::return_stmt(None))
+        )],
+        [
+            vm::OpCode::True,
+            vm::OpCode::JumpIfFalse(4),
+            vm::OpCode::Pop,
+            vm::OpCode::Nil,
+            vm::OpCode::Return,
+            vm::OpCode::Jump(-6),
+            vm::OpCode::Pop
+        ],
+        []
     );
 }

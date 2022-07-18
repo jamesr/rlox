@@ -125,6 +125,10 @@ impl Chunk {
         }
     }
 
+    pub fn current_code_offset(&self) -> usize {
+        self.code.len()
+    }
+
     add_opcode_helper!(add_return, OpCode::Return);
     add_opcode_helper!(add_negate, OpCode::Negate);
     add_opcode_helper!(add_add, OpCode::Add);
