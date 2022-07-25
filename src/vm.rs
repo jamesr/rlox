@@ -1,6 +1,8 @@
-use std::{collections::HashMap, fmt::Display};
+use std::{collections::HashMap, fmt::Display, rc::Rc};
 
-use crate::error;
+use by_address::ByAddress;
+
+use crate::{error, gc};
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum OpCode {
@@ -22,6 +24,8 @@ pub enum OpCode {
     GetGlobal(usize),
     DefineGlobal(usize),
     SetGlobal(usize),
+    GetLocal(usize),
+    SetLocal(usize),
     JumpIfFalse(i16),
     Jump(i16),
     Pop,
@@ -33,6 +37,7 @@ pub enum Value {
     Bool(bool),
     Number(f64),
     String(String),
+    Function(ByAddress<gc::CellPtr<Function>>),
 }
 
 impl Value {
@@ -52,10 +57,35 @@ impl Display for Value {
             Value::Bool(b) => write!(f, "{}", b),
             Value::Number(n) => write!(f, "{}", n),
             Value::String(s) => write!(f, "{}", s),
+            Value::Function(fun) => write!(f, "<fn {}>", fun.name),
         }
     }
 }
 
+#[derive(Debug)]
+pub struct Function {
+    pub arity: usize,
+    pub chunk: Chunk,
+    pub name: String,
+}
+
+impl Function {
+    pub fn new() -> Self {
+        Self {
+            arity: 0,
+            chunk: Chunk::new(),
+            name: "".to_string(),
+        }
+    }
+}
+
+struct CallFrame {
+    function: gc::CellPtr<Function>,
+    ip: usize,
+    slots: Vec<Value>,
+}
+
+#[derive(Debug)]
 pub struct Chunk {
     pub code: Vec<OpCode>,
     pub constants: Vec<Value>,
@@ -87,6 +117,14 @@ impl Chunk {
     pub fn add_constant(&mut self, v: Value, loc: error::Location) {
         self.add_opcode(OpCode::Constant(self.constants.len()), loc);
         self.constants.push(v);
+    }
+
+    pub fn add_get_local(&mut self, depth: usize, loc: error::Location) {
+        self.add_opcode(OpCode::GetLocal(depth), loc);
+    }
+
+    pub fn add_set_local(&mut self, depth: usize, loc: error::Location) {
+        self.add_opcode(OpCode::SetLocal(depth), loc);
     }
 
     pub fn add_get_global(&mut self, name: &str, loc: error::Location) {
@@ -194,6 +232,8 @@ impl Chunk {
             OpCode::JumpIfFalse(offset) => println!("jump if false {}", offset),
             OpCode::Jump(offset) => println!("jump {}", offset),
             OpCode::Pop => println!("pop"),
+            OpCode::GetLocal(depth) => println!("get local index {}", depth),
+            OpCode::SetLocal(depth) => println!("set local index {}", depth),
         }
         Ok(())
     }
@@ -275,7 +315,11 @@ impl Vm {
         ));
     }
 
-    pub fn run(&mut self, chunk: Chunk) -> Result<Value, error::RuntimeError> {
+    pub fn run(&mut self, function: Function) -> Result<Value, error::RuntimeError> {
+        self.run_chunk(function.chunk)
+    }
+
+    pub fn run_chunk(&mut self, chunk: Chunk) -> Result<Value, error::RuntimeError> {
         self.ip = 0;
         loop {
             if self.trace {
@@ -390,6 +434,12 @@ impl Vm {
                 OpCode::Pop => {
                     self.pop()?;
                 }
+                OpCode::GetLocal(idx) => {
+                    self.push(self.stack[idx].clone());
+                }
+                OpCode::SetLocal(idx) => {
+                    self.stack[idx] = self.peek()?.clone();
+                }
             }
             self.ip = self.ip + 1;
             if self.ip == chunk.code.len() {
@@ -446,7 +496,7 @@ mod tests {
                     loc.line = loc.line + 1;
                 )*
                 //chunk.disassemble();
-                let result = vm.run(chunk);
+                let result = vm.run_chunk(chunk);
                 assert_eq!(result, $expected);
                 Ok(())
             }

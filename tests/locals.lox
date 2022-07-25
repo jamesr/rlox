@@ -1,0 +1,12 @@
+var global = "global";
+{
+  var local = "local";
+  var otherlocal = "other local";
+  {
+    var nested = "nested";
+    print "local is: " + local;
+    print "nested is: " + nested;
+  }
+  print "otherlocal is: " + otherlocal;
+  print "global is: " + global;
+}

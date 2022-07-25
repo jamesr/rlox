@@ -1,83 +1,129 @@
+use std::{
+    cell::RefCell,
+    ops::{AddAssign, SubAssign},
+};
+
 use crate::{
     ast,
     error::{self, ParseError},
     parser, vm,
 };
 
+#[derive(Debug)]
+enum VariableState {
+    Global,
+    Declared,
+    Local(usize),
+}
+
+struct State {
+    locals: Vec<(String, VariableState)>,
+    scope_depth: usize,
+}
+
+impl State {
+    fn new() -> Self {
+        Self {
+            locals: vec![],
+            scope_depth: 0,
+        }
+    }
+}
+
 pub struct Compiler {
     location_table: parser::LocationTable,
+    state: State,
 }
 
 impl Compiler {
     pub fn new(location_table: parser::LocationTable) -> Self {
-        Self { location_table }
+        Self {
+            location_table,
+            state: State::new(),
+        }
     }
 
     pub fn compile_stmt(
         &mut self,
         stmt: &ast::Stmt,
-        chunk: &mut vm::Chunk,
+        function: &mut vm::Function,
     ) -> Result<(), error::Error> {
         let loc = match self.location_table.get(&stmt.id()) {
             Some(loc) => loc.clone(),
             None => error::Location::default(),
         };
         match stmt {
-            ast::Stmt::Expr(e) => self.compile_expr(&*e.expr, chunk)?,
+            ast::Stmt::Expr(e) => self.compile_expr(&*e.expr, function)?,
             ast::Stmt::Print(p) => {
-                self.compile_expr(&p.expr, chunk)?;
-                chunk.add_print(loc);
+                self.compile_expr(&p.expr, function)?;
+                function.chunk.add_print(loc);
             }
             ast::Stmt::Return(r) => {
                 if let Some(value) = &r.value {
-                    self.compile_expr(&value, chunk)?;
+                    self.compile_expr(&value, function)?;
                 } else {
-                    chunk.add_nil(loc.clone());
+                    function.chunk.add_nil(loc.clone());
                 }
-                chunk.add_return(loc);
+                function.chunk.add_return(loc);
             }
             ast::Stmt::Block(b) => {
+                self.begin_scope();
                 for bs in &b.stmts {
-                    self.compile_stmt(&*bs, chunk)?;
+                    self.compile_stmt(&*bs, function)?;
                 }
+                self.end_scope(&mut function.chunk, loc.clone());
             }
             ast::Stmt::Var(v) => {
+                self.declare_variable(v.name.clone(), loc.clone())?;
                 match &v.initializer {
-                    Some(e) => self.compile_expr(e, chunk)?,
-                    None => chunk.add_nil(loc.clone()),
+                    Some(e) => self.compile_expr(e, function)?,
+                    None => function.chunk.add_nil(loc.clone()),
                 }
-                chunk.add_define_global(&v.name, loc);
+                if self.state.scope_depth == 0 {
+                    function.chunk.add_define_global(&v.name, loc);
+                } else {
+                    self.state.locals.last_mut().unwrap().1 =
+                        VariableState::Local(self.state.scope_depth);
+                }
             }
             ast::Stmt::If(i) => {
-                self.compile_expr(&i.condition, chunk)?;
+                self.compile_expr(&i.condition, function)?;
 
-                let then_offset = chunk.add_jump(vm::OpCode::JumpIfFalse(i16::MAX), loc.clone());
-                chunk.add_pop(loc.clone());
+                let then_offset = function
+                    .chunk
+                    .add_jump(vm::OpCode::JumpIfFalse(i16::MAX), loc.clone());
+                function.chunk.add_pop(loc.clone());
 
-                self.compile_stmt(&*i.then_branch, chunk)?;
+                self.compile_stmt(&*i.then_branch, function)?;
 
-                let else_offset = chunk.add_jump(vm::OpCode::Jump(i16::MAX), loc.clone());
+                let else_offset = function
+                    .chunk
+                    .add_jump(vm::OpCode::Jump(i16::MAX), loc.clone());
 
-                chunk.patch_jump(then_offset);
-                chunk.add_pop(loc);
+                function.chunk.patch_jump(then_offset);
+                function.chunk.add_pop(loc);
 
                 if let Some(else_branch) = &i.else_branch {
-                    self.compile_stmt(else_branch, chunk)?;
+                    self.compile_stmt(else_branch, function)?;
                 }
-                chunk.patch_jump(else_offset);
+                function.chunk.patch_jump(else_offset);
             }
             ast::Stmt::While(w) => {
-                let loop_start = chunk.current_code_offset();
-                self.compile_expr(&&w.condition, chunk)?;
-                let end_jump = chunk.add_jump(vm::OpCode::JumpIfFalse(i16::MAX), loc.clone());
-                chunk.add_pop(loc.clone());
+                let loop_start = function.chunk.current_code_offset();
+                self.compile_expr(&&w.condition, function)?;
+                let end_jump = function
+                    .chunk
+                    .add_jump(vm::OpCode::JumpIfFalse(i16::MAX), loc.clone());
+                function.chunk.add_pop(loc.clone());
 
-                self.compile_stmt(&*w.body, chunk)?;
-                let loop_len = (chunk.current_code_offset() - loop_start + 1) as i16;
-                chunk.add_jump(vm::OpCode::Jump(-loop_len), loc.clone());
+                self.compile_stmt(&*w.body, function)?;
+                let loop_len = (function.chunk.current_code_offset() - loop_start + 1) as i16;
+                function
+                    .chunk
+                    .add_jump(vm::OpCode::Jump(-loop_len), loc.clone());
 
-                chunk.patch_jump(end_jump);
-                chunk.add_pop(loc);
+                function.chunk.patch_jump(end_jump);
+                function.chunk.add_pop(loc);
             }
             ast::Stmt::Function(_) => todo!(),
             ast::Stmt::Class(_) => todo!(),
@@ -88,7 +134,7 @@ impl Compiler {
     pub fn compile_expr(
         &mut self,
         expr: &ast::Expr,
-        chunk: &mut vm::Chunk,
+        function: &mut vm::Function,
     ) -> Result<(), error::Error> {
         let loc = match self.location_table.get(&expr.id()) {
             Some(loc) => loc.clone(),
@@ -96,10 +142,10 @@ impl Compiler {
         };
         match expr {
             ast::Expr::Unary(u) => {
-                self.compile_expr(&u.right, chunk)?;
+                self.compile_expr(&u.right, function)?;
                 match &u.operator {
-                    ast::Operator::Minus => chunk.add_negate(loc),
-                    ast::Operator::Bang => chunk.add_not(loc),
+                    ast::Operator::Minus => function.chunk.add_negate(loc),
+                    ast::Operator::Bang => function.chunk.add_not(loc),
                     _ => {
                         return Err(error::Error::Parse(ParseError::new(
                             "unknown unary operator",
@@ -109,42 +155,44 @@ impl Compiler {
                 }
             }
             ast::Expr::Literal(l) => match &l.value {
-                ast::LiteralValue::Number(n) => chunk.add_constant(vm::Value::Number(*n), loc),
-                ast::LiteralValue::String(s) => {
-                    chunk.add_constant(vm::Value::String(s.clone()), loc)
+                ast::LiteralValue::Number(n) => {
+                    function.chunk.add_constant(vm::Value::Number(*n), loc)
                 }
+                ast::LiteralValue::String(s) => function
+                    .chunk
+                    .add_constant(vm::Value::String(s.clone()), loc),
                 ast::LiteralValue::Bool(b) => match b {
-                    true => chunk.add_true(loc),
-                    false => chunk.add_false(loc),
+                    true => function.chunk.add_true(loc),
+                    false => function.chunk.add_false(loc),
                 },
-                ast::LiteralValue::Nil => chunk.add_nil(loc),
+                ast::LiteralValue::Nil => function.chunk.add_nil(loc),
             },
             ast::Expr::Binary(b) => {
-                self.compile_expr(&b.left, chunk)?;
-                self.compile_expr(&b.right, chunk)?;
+                self.compile_expr(&b.left, function)?;
+                self.compile_expr(&b.right, function)?;
                 match b.operator {
                     ast::Operator::Minus => {
                         // a - b is equivalent to a + (- b) and b is at the top of the stack.
-                        chunk.add_negate(loc.clone());
-                        chunk.add_add(loc);
+                        function.chunk.add_negate(loc.clone());
+                        function.chunk.add_add(loc);
                     }
-                    ast::Operator::Plus => chunk.add_add(loc),
-                    ast::Operator::Slash => chunk.add_divide(loc),
-                    ast::Operator::Star => chunk.add_multiply(loc),
+                    ast::Operator::Plus => function.chunk.add_add(loc),
+                    ast::Operator::Slash => function.chunk.add_divide(loc),
+                    ast::Operator::Star => function.chunk.add_multiply(loc),
                     ast::Operator::BangEqual => {
-                        chunk.add_equal(loc.clone());
-                        chunk.add_not(loc);
+                        function.chunk.add_equal(loc.clone());
+                        function.chunk.add_not(loc);
                     }
-                    ast::Operator::EqualEqual => chunk.add_equal(loc),
-                    ast::Operator::Greater => chunk.add_greater(loc),
+                    ast::Operator::EqualEqual => function.chunk.add_equal(loc),
+                    ast::Operator::Greater => function.chunk.add_greater(loc),
                     ast::Operator::GreaterEqual => {
-                        chunk.add_less(loc.clone());
-                        chunk.add_not(loc);
+                        function.chunk.add_less(loc.clone());
+                        function.chunk.add_not(loc);
                     }
-                    ast::Operator::Less => chunk.add_less(loc),
+                    ast::Operator::Less => function.chunk.add_less(loc),
                     ast::Operator::LessEqual => {
-                        chunk.add_greater(loc.clone());
-                        chunk.add_not(loc);
+                        function.chunk.add_greater(loc.clone());
+                        function.chunk.add_not(loc);
                     }
                     _ => {
                         return Err(error::Error::Parse(ParseError::new(
@@ -155,30 +203,49 @@ impl Compiler {
                 }
             }
             ast::Expr::Variable(v) => {
-                chunk.add_get_global(&v.name, loc);
+                match self.resolve_variable(&v.name) {
+                    VariableState::Local(depth) => function.chunk.add_get_local(depth, loc),
+                    VariableState::Global => function.chunk.add_get_global(&v.name, loc),
+                    VariableState::Declared => {
+                        return Err(error::Error::Parse(ParseError::new(
+                            "Can't read local variable in its own initializer.",
+                            loc,
+                        )));
+                    }
+                };
             }
             ast::Expr::Assign(a) => {
-                self.compile_expr(&a.value, chunk)?;
-                chunk.add_set_global(&a.name, loc);
+                self.compile_expr(&a.value, function)?;
+                match self.resolve_variable(&a.name) {
+                    VariableState::Local(depth) => function.chunk.add_set_local(depth, loc),
+                    VariableState::Global => function.chunk.add_set_global(&a.name, loc),
+                    VariableState::Declared => panic!("declared variable found in assignment"),
+                };
             }
             ast::Expr::Logical(l) => match l.operator {
                 ast::Operator::And => {
-                    self.compile_expr(&l.left, chunk)?;
-                    let end_jump = chunk.add_jump(vm::OpCode::JumpIfFalse(i16::MAX), loc.clone());
-                    chunk.add_pop(loc.clone());
+                    self.compile_expr(&l.left, function)?;
+                    let end_jump = function
+                        .chunk
+                        .add_jump(vm::OpCode::JumpIfFalse(i16::MAX), loc.clone());
+                    function.chunk.add_pop(loc.clone());
 
-                    self.compile_expr(&l.right, chunk)?;
-                    chunk.patch_jump(end_jump);
+                    self.compile_expr(&l.right, function)?;
+                    function.chunk.patch_jump(end_jump);
                 }
                 ast::Operator::Or => {
-                    self.compile_expr(&l.left, chunk)?;
-                    chunk.add_jump(vm::OpCode::JumpIfFalse(1), loc.clone());
-                    let end_jump = chunk.add_jump(vm::OpCode::Jump(i16::MAX), loc.clone());
+                    self.compile_expr(&l.left, function)?;
+                    function
+                        .chunk
+                        .add_jump(vm::OpCode::JumpIfFalse(1), loc.clone());
+                    let end_jump = function
+                        .chunk
+                        .add_jump(vm::OpCode::Jump(i16::MAX), loc.clone());
 
-                    chunk.add_pop(loc.clone());
+                    function.chunk.add_pop(loc.clone());
 
-                    self.compile_expr(&l.right, chunk)?;
-                    chunk.patch_jump(end_jump);
+                    self.compile_expr(&l.right, function)?;
+                    function.chunk.patch_jump(end_jump);
                 }
                 _ => {
                     return Err(error::Error::Parse(ParseError::new(
@@ -196,6 +263,62 @@ impl Compiler {
         }
         Ok(())
     }
+
+    fn begin_scope(&mut self) {
+        self.state.scope_depth.add_assign(1);
+    }
+
+    fn end_scope(&mut self, chunk: &mut vm::Chunk, loc: error::Location) {
+        self.state.scope_depth.sub_assign(1);
+        let mut num_popped = 0;
+        for local in self.state.locals.iter().rev() {
+            if let VariableState::Local(depth) = local.1 {
+                if depth <= self.state.scope_depth {
+                    break;
+                }
+            }
+            chunk.add_pop(loc.clone());
+            num_popped.add_assign(1);
+        }
+        self.state
+            .locals
+            .truncate(self.state.locals.len() - num_popped);
+    }
+
+    fn declare_variable(&mut self, name: String, loc: error::Location) -> Result<(), error::Error> {
+        if self.state.scope_depth == 0 {
+            return Ok(());
+        }
+
+        for local in &self.state.locals {
+            if let VariableState::Local(depth) = local.1 {
+                if depth < self.state.scope_depth {
+                    break;
+                }
+            }
+
+            if local.0 == name {
+                return Err(error::Error::Parse(ParseError::new(
+                    "Already a variable with this name in this scope.",
+                    loc,
+                )));
+            }
+        }
+
+        self.state.locals.push((name, VariableState::Declared));
+        Ok(())
+    }
+
+    fn resolve_variable(&self, name: &str) -> VariableState {
+        if !self.state.locals.is_empty() {
+            for i in (0..self.state.locals.len()).rev() {
+                if self.state.locals[i].0 == name {
+                    return VariableState::Local(i);
+                }
+            }
+        }
+        VariableState::Global
+    }
 }
 
 #[cfg(test)]
@@ -209,10 +332,10 @@ mod tests {
             fn $name() -> Result<(), error::Error> {
                 let expr = $expr;
                 let mut compiler = Compiler::new(parser::LocationTable::new());
-                let mut chunk = vm::Chunk::new();
-                compiler.compile_expr(&expr, &mut chunk)?;
-                assert_eq!(chunk.code, vec![ $($code),* ]);
-                assert_eq!(chunk.constants, vec![ $($constant),* ]);
+                let mut function = vm::Function::new();
+                compiler.compile_expr(&expr, &mut function)?;
+                assert_eq!(function.chunk.code, vec![ $($code),* ]);
+                assert_eq!(function.chunk.constants, vec![ $($constant),* ]);
                 Ok(())
             }
 
@@ -352,12 +475,12 @@ mod tests {
             fn $name() -> Result<(), error::Error> {
                 let stmts = $stmts;
                 let mut compiler = Compiler::new(parser::LocationTable::new());
-                let mut chunk = vm::Chunk::new();
+                let mut function = vm::Function::new();
                 for stmt in stmts {
-                    compiler.compile_stmt(&stmt, &mut chunk)?;
+                    compiler.compile_stmt(&stmt, &mut function)?;
                 }
-                assert_eq!(chunk.code, vec![ $($code),* ]);
-                assert_eq!(chunk.constants, vec![ $($constant),* ]);
+                assert_eq!(function.chunk.code, vec![ $($code),* ]);
+                assert_eq!(function.chunk.constants, vec![ $($constant),* ]);
                 Ok(())
             }
 

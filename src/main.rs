@@ -57,13 +57,13 @@ fn run_vm(source: &str, vm: &mut vm::Vm) -> Result<(), error::Error> {
     //let mut resolver = resolver::Resolver::new(interpreter, &location_table);
     //resolver.resolve(&stmts)?;
     let mut compiler = compiler::Compiler::new(location_table);
-    let mut chunk = vm::Chunk::new();
+    let mut function = vm::Function::new();
     for stmt in stmts {
-        compiler.compile_stmt(&*stmt, &mut chunk)?;
+        compiler.compile_stmt(&*stmt, &mut function)?;
     }
     //chunk.disassemble()?;
 
-    let result = vm.run(chunk)?;
+    let result = vm.run(function)?;
     println!("statements evaluted to {:?}", result);
     Ok(())
 }

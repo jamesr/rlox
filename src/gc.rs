@@ -13,6 +13,7 @@ pub struct Heap<H> {
     _phantom: PhantomData<H>,
 }
 
+#[derive(Debug)]
 pub struct RawPtr<T: Sized> {
     ptr: NonNull<T>,
 }
@@ -173,6 +174,7 @@ impl<H: AllocHeader> AllocRaw for Heap<H> {
     }
 }
 
+#[derive(Debug)]
 pub struct CellPtr<T: Sized> {
     inner: Cell<RawPtr<T>>,
 }
@@ -196,6 +198,20 @@ impl<T: Sized> Clone for CellPtr<T> {
         CellPtr {
             inner: self.inner.clone(),
         }
+    }
+}
+
+impl<T: Sized> std::ops::Deref for CellPtr<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        self.borrow()
+    }
+}
+
+impl<T: Sized> std::ops::DerefMut for CellPtr<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.borrow_mut()
     }
 }
 
