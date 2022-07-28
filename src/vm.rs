@@ -70,11 +70,11 @@ pub struct Function {
 }
 
 impl Function {
-    pub fn new() -> Self {
+    pub fn new(arity: usize, name: &str) -> Self {
         Self {
-            arity: 0,
+            arity,
             chunk: Chunk::new(),
-            name: "".to_string(),
+            name: name.to_string(),
         }
     }
 }

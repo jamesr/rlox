@@ -57,10 +57,7 @@ fn run_vm(source: &str, vm: &mut vm::Vm) -> Result<(), error::Error> {
     //let mut resolver = resolver::Resolver::new(interpreter, &location_table);
     //resolver.resolve(&stmts)?;
     let mut compiler = compiler::Compiler::new(location_table);
-    let mut function = vm::Function::new();
-    for stmt in stmts {
-        compiler.compile_stmt(&*stmt, &mut function)?;
-    }
+    let function = compiler.compile(&stmts, 0, "<script>")?;
     //chunk.disassemble()?;
 
     let result = vm.run(function)?;

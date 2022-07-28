@@ -43,7 +43,20 @@ impl Compiler {
         }
     }
 
-    pub fn compile_stmt(
+    pub fn compile(
+        &mut self,
+        stmts: &[Box<ast::Stmt>],
+        arity: usize,
+        name: &str,
+    ) -> Result<vm::Function, error::Error> {
+        let mut function = vm::Function::new(arity, name);
+        for stmt in stmts {
+            self.compile_stmt(stmt, &mut function)?;
+        }
+        Ok(function)
+    }
+
+    fn compile_stmt(
         &mut self,
         stmt: &ast::Stmt,
         function: &mut vm::Function,
@@ -125,13 +138,21 @@ impl Compiler {
                 function.chunk.patch_jump(end_jump);
                 function.chunk.add_pop(loc);
             }
-            ast::Stmt::Function(_) => todo!(),
+            ast::Stmt::Function(f) => {
+                // Declare variable
+                let function = self.compile(&f.body, f.params.len(), &f.name);
+                // Reserve slot 0 for the function object.
+                self.state
+                    .locals
+                    .push((String::new(), VariableState::Local(0)));
+                // Assign function to variable
+            }
             ast::Stmt::Class(_) => todo!(),
         }
         Ok(())
     }
 
-    pub fn compile_expr(
+    fn compile_expr(
         &mut self,
         expr: &ast::Expr,
         function: &mut vm::Function,
@@ -332,7 +353,7 @@ mod tests {
             fn $name() -> Result<(), error::Error> {
                 let expr = $expr;
                 let mut compiler = Compiler::new(parser::LocationTable::new());
-                let mut function = vm::Function::new();
+                let mut function = vm::Function::new(0, "<script>");
                 compiler.compile_expr(&expr, &mut function)?;
                 assert_eq!(function.chunk.code, vec![ $($code),* ]);
                 assert_eq!(function.chunk.constants, vec![ $($constant),* ]);
@@ -475,7 +496,7 @@ mod tests {
             fn $name() -> Result<(), error::Error> {
                 let stmts = $stmts;
                 let mut compiler = Compiler::new(parser::LocationTable::new());
-                let mut function = vm::Function::new();
+                let mut function = vm::Function::new(0, "<script>");
                 for stmt in stmts {
                     compiler.compile_stmt(&stmt, &mut function)?;
                 }
