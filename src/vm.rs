@@ -1,8 +1,11 @@
-use std::{collections::HashMap, fmt::Display, rc::Rc};
+use std::{collections::HashMap, fmt::Display, mem::size_of, rc::Rc};
 
 use by_address::ByAddress;
 
-use crate::{error, gc};
+use crate::{
+    error,
+    gc::{self, Heap},
+};
 
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum OpCode {
@@ -239,12 +242,89 @@ impl Chunk {
     }
 }
 
+struct VmHeader {
+    mark: gc::Mark,
+    ty: VmTypeId,
+}
+
+#[derive(Clone, Copy)]
+enum VmTypeId {
+    Value, // TODO: Pack things
+}
+
+impl gc::AllocTypeId for VmTypeId {}
+
+impl VmHeader {
+    fn trace_value(&self, val: &Value) -> Vec<std::ptr::NonNull<()>> {
+        let mut reachable = vec![];
+        match val {
+            Value::Function(p) => {
+                for constant in &p.0.chunk.constants {
+                    reachable.append(&mut &mut self.trace_value(constant));
+                }
+            }
+            _ => {}
+        }
+        reachable
+    }
+}
+
+impl gc::AllocObject<VmTypeId> for Value {
+    const TYPE_ID: VmTypeId = VmTypeId::Value;
+}
+
+impl gc::AllocHeader for VmHeader {
+    type TypeId = VmTypeId;
+
+    fn new<T: gc::AllocObject<Self::TypeId>>(size: usize, mark: gc::Mark) -> Self {
+        Self {
+            mark,
+            ty: T::TYPE_ID,
+        }
+    }
+
+    fn new_array<T: gc::AllocObject<Self::TypeId>>(size: usize, mark: gc::Mark) -> Self {
+        Self {
+            mark,
+            ty: T::TYPE_ID,
+        }
+    }
+
+    fn trace(&self, object: std::ptr::NonNull<()>) -> Vec<std::ptr::NonNull<()>> {
+        let val = unsafe { object.cast::<Value>().as_ref() };
+        self.trace_value(val)
+    }
+
+    fn set_mark(&mut self, mark: gc::Mark) {
+        self.mark = mark;
+    }
+
+    fn mark(&self) -> gc::Mark {
+        self.mark
+    }
+
+    fn size(&self) -> usize {
+        std::mem::size_of::<Value>()
+    }
+
+    fn layout(&self) -> std::alloc::Layout {
+        std::alloc::Layout::new::<Value>()
+    }
+
+    fn type_id(&self) -> Self::TypeId {
+        self.ty
+    }
+}
+
+type ValuePtr = gc::CellPtr<Value>;
+
 pub struct Vm {
     ip: usize,
-    stack: Vec<Value>,
+    stack: Vec<ValuePtr>,
     trace: bool,
     current_loc: error::Location,
-    globals: HashMap<String, Value>,
+    globals: HashMap<String, ValuePtr>,
+    heap: Heap<VmHeader>,
 }
 
 impl Vm {
@@ -255,6 +335,7 @@ impl Vm {
             trace: false,
             current_loc: error::Location::default(),
             globals: HashMap::new(),
+            heap: Heap::new(),
         }
     }
 
@@ -262,22 +343,36 @@ impl Vm {
         self.trace = true;
     }
 
-    fn push(&mut self, v: Value) {
+    fn alloc_value(&mut self, v: Value) -> Result<ValuePtr, error::RuntimeError> {
+        self.heap.alloc_cell(v).map_err(|e| {
+            error::RuntimeError::new(
+                &format!("Allocation error: {:?}", e),
+                error::Location::default(),
+            )
+        })
+    }
+
+    fn push(&mut self, v: ValuePtr) {
         self.stack.push(v)
+    }
+
+    fn push_value(&mut self, v: Value) -> Result<(), error::RuntimeError> {
+        let ptr = self.alloc_value(v)?;
+        Ok(self.push(ptr))
     }
 
     fn error(&self, message: &str) -> error::RuntimeError {
         error::RuntimeError::new(message, self.current_loc.clone())
     }
 
-    fn pop(&mut self) -> Result<Value, error::RuntimeError> {
+    fn pop(&mut self) -> Result<ValuePtr, error::RuntimeError> {
         match self.stack.pop() {
             Some(v) => Ok(v),
             None => Err(self.error("Pop with empty stack.")),
         }
     }
 
-    fn peek(&self) -> Result<&Value, error::RuntimeError> {
+    fn peek(&self) -> Result<&ValuePtr, error::RuntimeError> {
         match self.stack.last() {
             Some(v) => Ok(v),
             None => Err(self.error("Peek with empty stack.")),
@@ -289,9 +384,9 @@ impl Vm {
         F: FnOnce(f64, f64) -> f64,
     {
         // The right hand side is at the top of the stack and the left hand side is below.
-        if let Value::Number(rhs) = self.pop()? {
-            if let Value::Number(lhs) = self.pop()? {
-                self.push(Value::Number(op(lhs, rhs)));
+        if let Value::Number(rhs) = self.pop()?.borrow() {
+            if let Value::Number(lhs) = self.pop()?.borrow() {
+                self.push_value(Value::Number(op(*lhs, *rhs)))?;
                 return Ok(());
             }
         }
@@ -303,9 +398,10 @@ impl Vm {
         F: FnOnce(String, String) -> String,
     {
         // The right hand side is at the top of the stack and the left hand side is below.
-        if let Value::String(rhs) = self.pop()? {
-            if let Value::String(lhs) = self.pop()? {
-                self.push(Value::String(op(lhs, rhs)));
+        if let Value::String(rhs) = self.pop()?.borrow() {
+            if let Value::String(lhs) = self.pop()?.borrow() {
+                // TODO - extra string copies here
+                self.push_value(Value::String(op(lhs.to_string(), rhs.to_string())))?;
                 return Ok(());
             }
         }
@@ -315,11 +411,11 @@ impl Vm {
         ));
     }
 
-    pub fn run(&mut self, function: Function) -> Result<Value, error::RuntimeError> {
+    pub fn run(&mut self, function: Function) -> Result<ValuePtr, error::RuntimeError> {
         self.run_chunk(function.chunk)
     }
 
-    pub fn run_chunk(&mut self, chunk: Chunk) -> Result<Value, error::RuntimeError> {
+    pub fn run_chunk(&mut self, chunk: Chunk) -> Result<ValuePtr, error::RuntimeError> {
         self.ip = 0;
         loop {
             if self.trace {
@@ -328,11 +424,11 @@ impl Vm {
                 println!();
                 println!("=== stack ===");
                 for v in &self.stack {
-                    println!("[ {} ]", v);
+                    println!("[ {} ]", v.borrow());
                 }
                 println!("=== globals ===");
                 for (name, value) in &self.globals {
-                    println!("\"{}\": -> {}", &name, &value);
+                    println!("\"{}\": -> {}", &name, value.borrow());
                 }
             }
             self.current_loc = chunk.locs[self.ip].clone();
@@ -343,16 +439,16 @@ impl Vm {
                 }
                 OpCode::Constant(index) => {
                     let value = chunk.constants[index].clone();
-                    self.push(value);
+                    self.push_value(value)?;
                 }
                 OpCode::Negate => {
-                    if let Value::Number(n) = self.pop()? {
-                        self.push(Value::Number(-n));
+                    if let Value::Number(n) = *self.pop()? {
+                        self.push_value(Value::Number(-n))?;
                     } else {
                         return Err(self.error("Operand must be a number."));
                     }
                 }
-                OpCode::Add => match self.peek()? {
+                OpCode::Add => match self.peek()?.borrow() {
                     Value::Number(_) => self.binary_op_number(|lhs, rhs| lhs + rhs),
                     Value::String(_) => self.binary_op_string(|lhs, rhs| lhs + &rhs),
                     _ => return Err(self.error("Operands must be two strings or two numbers.")),
@@ -360,30 +456,30 @@ impl Vm {
                 OpCode::Subtract => self.binary_op_number(|lhs, rhs| lhs - rhs)?,
                 OpCode::Multiply => self.binary_op_number(|lhs, rhs| lhs * rhs)?,
                 OpCode::Divide => self.binary_op_number(|lhs, rhs| lhs / rhs)?,
-                OpCode::Nil => self.push(Value::Nil),
-                OpCode::True => self.push(Value::Bool(true)),
-                OpCode::False => self.push(Value::Bool(false)),
+                OpCode::Nil => self.push_value(Value::Nil)?,
+                OpCode::True => self.push_value(Value::Bool(true))?,
+                OpCode::False => self.push_value(Value::Bool(false))?,
                 OpCode::Not => {
                     let val = self.pop()?;
-                    self.push(Value::Bool(val.falsey()))
+                    self.push_value(Value::Bool(val.falsey()))?;
                 }
                 OpCode::Equal => {
-                    let rhs = self.pop()?;
-                    let lhs = self.pop()?;
-                    self.push(Value::Bool(lhs == rhs));
+                    let rhs = &*self.pop()?;
+                    let lhs = &*self.pop()?;
+                    self.push_value(Value::Bool(lhs == rhs))?;
                 }
                 OpCode::Greater => {
-                    let rhs = self.pop()?;
-                    let lhs = self.pop()?;
-                    self.push(Value::Bool(lhs > rhs));
+                    let rhs = &*self.pop()?;
+                    let lhs = &*self.pop()?;
+                    self.push_value(Value::Bool(lhs > rhs))?;
                 }
                 OpCode::Less => {
-                    let rhs = self.pop()?;
-                    let lhs = self.pop()?;
-                    self.push(Value::Bool(lhs < rhs));
+                    let rhs = &*self.pop()?;
+                    let lhs = &*self.pop()?;
+                    self.push_value(Value::Bool(lhs < rhs))?;
                 }
                 OpCode::Print => {
-                    let value = self.pop()?;
+                    let value = &*self.pop()?;
                     println!("{}", value);
                 }
                 OpCode::GetGlobal(index) => {
@@ -443,7 +539,7 @@ impl Vm {
             }
             self.ip = self.ip + 1;
             if self.ip == chunk.code.len() {
-                return Ok(Value::Nil);
+                return Ok(self.alloc_value(Value::Nil)?);
             }
         }
     }
@@ -496,8 +592,17 @@ mod tests {
                     loc.line = loc.line + 1;
                 )*
                 //chunk.disassemble();
-                let result = vm.run_chunk(chunk);
-                assert_eq!(result, $expected);
+                let expected: Result::<Value, error::RuntimeError> = $expected;
+                match vm.run_chunk(chunk){
+                    Ok(v) => {
+                        assert!(expected.is_ok());
+                        assert_eq!(*v, expected.ok().unwrap());
+                    },
+                    Err(e) => {
+                        assert!(expected.is_err());
+                        assert_eq!(e, expected.err().unwrap());
+                    },
+                };
                 Ok(())
             }
         };

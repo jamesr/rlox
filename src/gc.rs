@@ -67,7 +67,7 @@ pub trait AllocHeader: Sized {
 }
 
 #[derive(Debug)]
-enum AllocError {
+pub enum AllocError {
     OOM,
     BadAllocationRequest,
 }
@@ -184,11 +184,11 @@ impl<T: Sized> CellPtr<T> {
         Self { inner }
     }
 
-    fn borrow(&self) -> &T {
+    pub fn borrow(&self) -> &T {
         unsafe { self.inner.get().ptr.as_ref() }
     }
 
-    fn borrow_mut(&self) -> &mut T {
+    pub fn borrow_mut(&self) -> &mut T {
         unsafe { self.inner.get().ptr.as_mut() }
     }
 }
@@ -223,6 +223,13 @@ impl<H: AllocHeader> Heap<H> {
             tracing: false,
             _phantom: PhantomData::default(),
         }
+    }
+
+    pub fn alloc_cell<T: AllocObject<H::TypeId>>(
+        &mut self,
+        object: T,
+    ) -> Result<CellPtr<T>, AllocError> {
+        Ok(CellPtr::new(Cell::new(self.alloc(object)?)))
     }
 
     pub fn add_root<T: AllocObject<H::TypeId>>(&mut self, root: CellPtr<T>) {
