@@ -1,4 +1,7 @@
-use std::{collections::HashMap, fmt::Display, mem::size_of, rc::Rc};
+use std::{
+    collections::{BTreeMap, HashMap},
+    fmt::Display,
+};
 
 use by_address::ByAddress;
 
@@ -34,6 +37,8 @@ pub enum OpCode {
     Pop,
 }
 
+pub type ValuePtr = gc::CellPtr<Value>;
+
 #[derive(PartialEq, PartialOrd, Clone, Debug)]
 pub enum Value {
     Nil,
@@ -41,6 +46,8 @@ pub enum Value {
     Number(f64),
     String(String),
     Function(ByAddress<gc::CellPtr<Function>>),
+    Array(Vec<ValuePtr>),
+    Map(BTreeMap<String, ValuePtr>),
 }
 
 impl Value {
@@ -61,6 +68,8 @@ impl Display for Value {
             Value::Number(n) => write!(f, "{}", n),
             Value::String(s) => write!(f, "{}", s),
             Value::Function(fun) => write!(f, "<fn {}>", fun.name),
+            Value::Array(a) => write!(f, "array len {}", a.len()),
+            Value::Map(m) => write!(f, "map with {} entries", m.len()),
         }
     }
 }
@@ -256,16 +265,35 @@ impl gc::AllocTypeId for VmTypeId {}
 
 impl VmHeader {
     fn trace_value(&self, val: &Value) -> Vec<std::ptr::NonNull<()>> {
-        let mut reachable = vec![];
         match val {
             Value::Function(p) => {
-                for constant in &p.0.chunk.constants {
-                    reachable.append(&mut &mut self.trace_value(constant));
-                }
+                p.0.chunk
+                    .constants
+                    .iter()
+                    .map(|v| self.trace_value(v))
+                    .fold(vec![], |mut a, mut e| {
+                        a.append(&mut e);
+                        a
+                    })
             }
-            _ => {}
+            Value::Array(a) => {
+                a.iter()
+                    .map(|ptr| self.trace_value(ptr.borrow()))
+                    .fold(vec![], |mut a, mut e| {
+                        a.append(&mut e);
+                        a
+                    })
+            }
+            Value::Map(m) => {
+                m.values()
+                    .map(|v| self.trace_value(v))
+                    .fold(vec![], |mut a, mut e| {
+                        a.append(&mut e);
+                        a
+                    })
+            }
+            _ => vec![],
         }
-        reachable
     }
 }
 
@@ -316,26 +344,29 @@ impl gc::AllocHeader for VmHeader {
     }
 }
 
-type ValuePtr = gc::CellPtr<Value>;
-
 pub struct Vm {
     ip: usize,
-    stack: Vec<ValuePtr>,
+    stack: ValuePtr,
     trace: bool,
     current_loc: error::Location,
-    globals: HashMap<String, ValuePtr>,
+    globals: ValuePtr,
     heap: Heap<VmHeader>,
 }
 
 impl Vm {
     pub fn new() -> Self {
+        let mut heap = Heap::new();
+        let stack = heap.alloc_cell(Value::Array(vec![])).unwrap();
+        let globals = heap.alloc_cell(Value::Map(BTreeMap::new())).unwrap();
+        heap.add_root(stack.clone());
+        heap.add_root(globals.clone());
         Self {
             ip: 0,
-            stack: vec![],
+            stack,
             trace: false,
             current_loc: error::Location::default(),
-            globals: HashMap::new(),
-            heap: Heap::new(),
+            globals,
+            heap,
         }
     }
 
@@ -352,8 +383,22 @@ impl Vm {
         })
     }
 
+    fn stack(&self) -> &Vec<ValuePtr> {
+        match self.stack.borrow() {
+            Value::Array(a) => a,
+            _ => panic!("uh oh"),
+        }
+    }
+
+    fn stack_mut(&mut self) -> &mut Vec<ValuePtr> {
+        match self.stack.borrow_mut() {
+            Value::Array(a) => a,
+            _ => panic!("uh oh"),
+        }
+    }
+
     fn push(&mut self, v: ValuePtr) {
-        self.stack.push(v)
+        self.stack_mut().push(v)
     }
 
     fn push_value(&mut self, v: Value) -> Result<(), error::RuntimeError> {
@@ -361,22 +406,35 @@ impl Vm {
         Ok(self.push(ptr))
     }
 
-    fn error(&self, message: &str) -> error::RuntimeError {
-        error::RuntimeError::new(message, self.current_loc.clone())
-    }
-
     fn pop(&mut self) -> Result<ValuePtr, error::RuntimeError> {
-        match self.stack.pop() {
+        match self.stack_mut().pop() {
             Some(v) => Ok(v),
             None => Err(self.error("Pop with empty stack.")),
         }
     }
 
     fn peek(&self) -> Result<&ValuePtr, error::RuntimeError> {
-        match self.stack.last() {
+        match self.stack().last() {
             Some(v) => Ok(v),
             None => Err(self.error("Peek with empty stack.")),
         }
+    }
+    fn globals(&self) -> &BTreeMap<String, ValuePtr> {
+        match self.globals.borrow() {
+            Value::Map(m) => m,
+            _ => panic!("uh oh"),
+        }
+    }
+
+    fn globals_mut(&mut self) -> &mut BTreeMap<String, ValuePtr> {
+        match self.globals.borrow_mut() {
+            Value::Map(m) => m,
+            _ => panic!("uh oh"),
+        }
+    }
+
+    fn error(&self, message: &str) -> error::RuntimeError {
+        error::RuntimeError::new(message, self.current_loc.clone())
     }
 
     fn binary_op_number<F>(&mut self, op: F) -> Result<(), error::RuntimeError>
@@ -423,11 +481,11 @@ impl Vm {
                 chunk.disassemble_instruction(self.ip)?;
                 println!();
                 println!("=== stack ===");
-                for v in &self.stack {
+                for v in self.stack() {
                     println!("[ {} ]", v.borrow());
                 }
                 println!("=== globals ===");
-                for (name, value) in &self.globals {
+                for (name, value) in self.globals() {
                     println!("\"{}\": -> {}", &name, value.borrow());
                 }
             }
@@ -485,7 +543,7 @@ impl Vm {
                 OpCode::GetGlobal(index) => {
                     let name_constant = chunk.constants[index].clone();
                     if let Value::String(name) = name_constant {
-                        let value = match self.globals.get(&name) {
+                        let value = match self.globals().get(&name) {
                             Some(v) => v,
                             None => {
                                 return Err(self.error(&format!("Undefined variable {}", &name)));
@@ -500,7 +558,7 @@ impl Vm {
                     let name_constant = chunk.constants[index].clone();
                     if let Value::String(name) = name_constant {
                         let value = self.pop()?;
-                        self.globals.insert(name, value);
+                        self.globals_mut().insert(name, value);
                     } else {
                         return Err(self.error("global name must be string"));
                     }
@@ -509,7 +567,7 @@ impl Vm {
                     let name_constant = chunk.constants[index].clone();
                     if let Value::String(name) = name_constant {
                         let value = self.pop()?;
-                        match self.globals.get_mut(&name) {
+                        match self.globals_mut().get_mut(&name) {
                             Some(v) => *v = value,
                             None => {
                                 return Err(self.error(&format!("Undefined variable '{}'", name)));
@@ -531,10 +589,10 @@ impl Vm {
                     self.pop()?;
                 }
                 OpCode::GetLocal(idx) => {
-                    self.push(self.stack[idx].clone());
+                    self.push(self.stack()[idx].clone());
                 }
                 OpCode::SetLocal(idx) => {
-                    self.stack[idx] = self.peek()?.clone();
+                    self.stack_mut()[idx] = self.peek()?.clone();
                 }
             }
             self.ip = self.ip + 1;

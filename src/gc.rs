@@ -13,7 +13,7 @@ pub struct Heap<H> {
     _phantom: PhantomData<H>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, PartialOrd)]
 pub struct RawPtr<T: Sized> {
     ptr: NonNull<T>,
 }
@@ -174,7 +174,7 @@ impl<H: AllocHeader> AllocRaw for Heap<H> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, PartialOrd)]
 pub struct CellPtr<T: Sized> {
     inner: Cell<RawPtr<T>>,
 }
@@ -260,12 +260,7 @@ impl<H: AllocHeader> Heap<H> {
             }
             if header.mark() != Mark::Reachable {
                 header.set_mark(Mark::Reachable);
-                let object = Heap::<H>::get_object(next);
-                let traced: Vec<NonNull<()>> = header.trace(object);
-                traced
-                    .iter()
-                    .map(|o| Heap::<H>::get_header(*o))
-                    .for_each(|s| reachable.push(s.cast::<H>()));
+                reachable.append(&mut self.trace(header, next));
             }
         }
         let mut freed = 0;
@@ -298,6 +293,16 @@ impl<H: AllocHeader> Heap<H> {
             }
         }
         freed
+    }
+
+    fn trace(&self, header: &H, header_ptr: std::ptr::NonNull<H>) -> Vec<std::ptr::NonNull<H>> {
+        let object = Heap::<H>::get_object(header_ptr);
+        let traced: Vec<NonNull<()>> = header.trace(object);
+        traced
+            .iter()
+            .map(|o| Heap::<H>::get_header(*o))
+            .map(|s| s.cast::<H>())
+            .collect::<Vec<_>>()
     }
 
     fn enable_tracing(&mut self, enable: bool) {
