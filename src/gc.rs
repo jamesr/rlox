@@ -122,6 +122,10 @@ impl<H: AllocHeader> AllocRaw for Heap<H> {
             object_ptr.write(object);
         }
 
+        if self.tracing {
+            println!("allocated object at {:?} header at {:?}", object_ptr, ptr);
+        }
+
         // Remember this allocation.
         self.all_allocs
             .borrow_mut()
@@ -191,6 +195,10 @@ impl<T: Sized> CellPtr<T> {
     pub fn borrow_mut(&self) -> &mut T {
         unsafe { self.inner.get().ptr.as_mut() }
     }
+
+    pub fn as_ptr(&self) -> std::ptr::NonNull<T> {
+        self.inner.get().ptr
+    }
 }
 
 impl<T: Sized> Clone for CellPtr<T> {
@@ -229,6 +237,9 @@ impl<H: AllocHeader> Heap<H> {
         &mut self,
         object: T,
     ) -> Result<CellPtr<T>, AllocError> {
+        if self.tracing {
+            self.collect();
+        }
         Ok(CellPtr::new(Cell::new(self.alloc(object)?)))
     }
 
@@ -244,6 +255,7 @@ impl<H: AllocHeader> Heap<H> {
 
     pub fn collect(&mut self) -> usize {
         if self.tracing {
+            println!("=== collect start ===");
             println!("mark with {} roots", self.roots.len());
         }
         let mut reachable = self.roots.iter().map(|r| *r).collect::<Vec<_>>();
@@ -263,13 +275,14 @@ impl<H: AllocHeader> Heap<H> {
                 reachable.append(&mut self.trace(header, next));
             }
         }
-        let mut freed = 0;
 
         if self.tracing {
-            println!("sweep");
+            println!("sweep - all allocs is {:?}", self.all_allocs);
         }
+        let num_objects = self.all_allocs.borrow().len();
+        let mut still_active = vec![];
         // Cull all the unreachable objects.
-        for header_ptr in &mut *self.all_allocs.borrow_mut() {
+        for mut header_ptr in self.all_allocs.take().into_iter() {
             let header = unsafe { header_ptr.as_mut() };
             if self.tracing {
                 println!(
@@ -280,17 +293,24 @@ impl<H: AllocHeader> Heap<H> {
             }
             if header.mark() == Mark::Reachable {
                 header.set_mark(Mark::Allocated);
+                still_active.push(header_ptr);
             } else {
                 // TODO: Drop the object somehow - through the trait?
                 // let object = Heap::<H>::get_object(*header_ptr);
                 let ptr = header_ptr.as_ptr() as *mut u8;
+                if self.tracing {
+                    println!("deallocating {:?}", ptr);
+                }
                 let layout = Layout::new::<H>().extend(header.layout()).unwrap().0;
                 unsafe {
                     std::alloc::dealloc(ptr, layout);
                 }
-
-                freed = freed + 1
             }
+        }
+        let freed = num_objects - still_active.len();
+        self.all_allocs.replace(still_active);
+        if self.tracing {
+            println!("=== collect over. freed {} objects ===", freed);
         }
         freed
     }
@@ -305,7 +325,7 @@ impl<H: AllocHeader> Heap<H> {
             .collect::<Vec<_>>()
     }
 
-    fn enable_tracing(&mut self, enable: bool) {
+    pub fn enable_tracing(&mut self, enable: bool) {
         self.tracing = enable;
     }
 }

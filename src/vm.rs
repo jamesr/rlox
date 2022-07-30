@@ -263,40 +263,6 @@ enum VmTypeId {
 
 impl gc::AllocTypeId for VmTypeId {}
 
-impl VmHeader {
-    fn trace_value(&self, val: &Value) -> Vec<std::ptr::NonNull<()>> {
-        match val {
-            Value::Function(p) => {
-                p.0.chunk
-                    .constants
-                    .iter()
-                    .map(|v| self.trace_value(v))
-                    .fold(vec![], |mut a, mut e| {
-                        a.append(&mut e);
-                        a
-                    })
-            }
-            Value::Array(a) => {
-                a.iter()
-                    .map(|ptr| self.trace_value(ptr.borrow()))
-                    .fold(vec![], |mut a, mut e| {
-                        a.append(&mut e);
-                        a
-                    })
-            }
-            Value::Map(m) => {
-                m.values()
-                    .map(|v| self.trace_value(v))
-                    .fold(vec![], |mut a, mut e| {
-                        a.append(&mut e);
-                        a
-                    })
-            }
-            _ => vec![],
-        }
-    }
-}
-
 impl gc::AllocObject<VmTypeId> for Value {
     const TYPE_ID: VmTypeId = VmTypeId::Value;
 }
@@ -320,7 +286,17 @@ impl gc::AllocHeader for VmHeader {
 
     fn trace(&self, object: std::ptr::NonNull<()>) -> Vec<std::ptr::NonNull<()>> {
         let val = unsafe { object.cast::<Value>().as_ref() };
-        self.trace_value(val)
+        match val {
+            Value::Array(a) => a
+                .iter()
+                .map(|ptr| ptr.as_ptr().cast::<()>())
+                .collect::<Vec<_>>(),
+            Value::Map(m) => m
+                .values()
+                .map(|v| v.as_ptr().cast::<()>())
+                .collect::<Vec<_>>(),
+            _ => vec![],
+        }
     }
 
     fn set_mark(&mut self, mark: gc::Mark) {
@@ -356,9 +332,10 @@ pub struct Vm {
 impl Vm {
     pub fn new() -> Self {
         let mut heap = Heap::new();
+        //heap.enable_tracing(true);
         let stack = heap.alloc_cell(Value::Array(vec![])).unwrap();
-        let globals = heap.alloc_cell(Value::Map(BTreeMap::new())).unwrap();
         heap.add_root(stack.clone());
+        let globals = heap.alloc_cell(Value::Map(BTreeMap::new())).unwrap();
         heap.add_root(globals.clone());
         Self {
             ip: 0,
@@ -386,14 +363,14 @@ impl Vm {
     fn stack(&self) -> &Vec<ValuePtr> {
         match self.stack.borrow() {
             Value::Array(a) => a,
-            _ => panic!("uh oh"),
+            _ => panic!("stack is not an array"),
         }
     }
 
     fn stack_mut(&mut self) -> &mut Vec<ValuePtr> {
         match self.stack.borrow_mut() {
             Value::Array(a) => a,
-            _ => panic!("uh oh"),
+            _ => panic!("stack is not an array"),
         }
     }
 
@@ -422,14 +399,14 @@ impl Vm {
     fn globals(&self) -> &BTreeMap<String, ValuePtr> {
         match self.globals.borrow() {
             Value::Map(m) => m,
-            _ => panic!("uh oh"),
+            _ => panic!("globals is not a map"),
         }
     }
 
     fn globals_mut(&mut self) -> &mut BTreeMap<String, ValuePtr> {
         match self.globals.borrow_mut() {
             Value::Map(m) => m,
-            _ => panic!("uh oh"),
+            _ => panic!("globals is not a map"),
         }
     }
 
