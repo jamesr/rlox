@@ -16,6 +16,7 @@ pub mod resolver;
 pub mod scanner;
 pub mod visitor;
 pub mod vm;
+pub mod vmgc;
 
 fn run_interpreted(source: &str, interpreter: &mut Interpreter) -> Result<(), error::Error> {
     let scanner = scanner::Scanner::new(source);
