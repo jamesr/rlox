@@ -1,14 +1,12 @@
-use std::{collections::BTreeMap, fmt::Display};
-
-use by_address::ByAddress;
+use std::{cell::RefCell, collections::BTreeMap, fmt::Display};
 
 use crate::{
     error,
-    gc::{self, Heap},
+    gc::Heap,
     vmgc::{self, ValuePtr},
 };
 
-#[derive(PartialEq, Clone, Copy, Debug)]
+#[derive(PartialEq, PartialOrd, Clone, Copy, Debug)]
 pub enum OpCode {
     Return,
     Constant(usize),
@@ -35,13 +33,13 @@ pub enum OpCode {
     Pop,
 }
 
-#[derive(PartialEq, PartialOrd, Clone, Debug)]
+#[derive(PartialEq, PartialOrd, Debug)]
 pub enum Value {
     Nil,
     Bool(bool),
     Number(f64),
     String(String),
-    Function(ByAddress<gc::CellPtr<Function>>),
+    Function(Function),
     Array(Vec<ValuePtr>),
     Map(BTreeMap<String, ValuePtr>),
 }
@@ -87,10 +85,22 @@ impl Function {
     }
 }
 
+impl PartialEq for Function {
+    fn eq(&self, _other: &Self) -> bool {
+        false
+    }
+}
+
+impl PartialOrd for Function {
+    fn partial_cmp(&self, _other: &Self) -> Option<std::cmp::Ordering> {
+        None
+    }
+}
+
 struct CallFrame {
-    function: gc::CellPtr<Function>,
+    function: ValuePtr,
     ip: usize,
-    slots: Vec<Value>,
+    stack_offset: usize,
 }
 
 #[derive(Debug)]
@@ -247,13 +257,17 @@ impl Chunk {
     }
 }
 
-pub struct Vm {
-    ip: usize,
+struct State {
+    frames: Vec<CallFrame>,
     stack: ValuePtr,
-    trace: bool,
-    current_loc: error::Location,
     globals: ValuePtr,
     heap: vmgc::Heap,
+}
+
+pub struct Vm {
+    state: RefCell<State>,
+    trace: bool,
+    current_loc: error::Location,
 }
 
 impl Vm {
@@ -265,12 +279,14 @@ impl Vm {
         let globals = heap.alloc_cell(Value::Map(BTreeMap::new())).unwrap();
         heap.add_root(globals.clone());
         Self {
-            ip: 0,
-            stack,
+            state: RefCell::new(State {
+                frames: vec![],
+                stack,
+                globals,
+                heap,
+            }),
             trace: false,
             current_loc: error::Location::default(),
-            globals,
-            heap,
         }
     }
 
@@ -278,8 +294,8 @@ impl Vm {
         self.trace = true;
     }
 
-    fn alloc_value(&mut self, v: Value) -> Result<ValuePtr, error::RuntimeError> {
-        self.heap.alloc_cell(v).map_err(|e| {
+    pub fn alloc_value(&self, v: Value) -> Result<ValuePtr, error::RuntimeError> {
+        self.state_mut().heap.alloc_cell(v).map_err(|e| {
             error::RuntimeError::new(
                 &format!("Allocation error: {:?}", e),
                 error::Location::default(),
@@ -287,53 +303,44 @@ impl Vm {
         })
     }
 
-    fn stack(&self) -> &Vec<ValuePtr> {
-        match self.stack.borrow() {
-            Value::Array(a) => a,
+    fn state(&self) -> std::cell::Ref<State> {
+        self.state.borrow()
+    }
+
+    fn state_mut(&self) -> std::cell::RefMut<State> {
+        self.state.borrow_mut()
+    }
+
+    fn push(&self, v: ValuePtr) {
+        match self.state_mut().stack.borrow_mut() {
+            Value::Array(a) => a.push(v),
             _ => panic!("stack is not an array"),
         }
     }
 
-    fn stack_mut(&mut self) -> &mut Vec<ValuePtr> {
-        match self.stack.borrow_mut() {
-            Value::Array(a) => a,
-            _ => panic!("stack is not an array"),
-        }
-    }
-
-    fn push(&mut self, v: ValuePtr) {
-        self.stack_mut().push(v)
-    }
-
-    fn push_value(&mut self, v: Value) -> Result<(), error::RuntimeError> {
+    fn push_value(&self, v: Value) -> Result<(), error::RuntimeError> {
         let ptr = self.alloc_value(v)?;
         Ok(self.push(ptr))
     }
 
-    fn pop(&mut self) -> Result<ValuePtr, error::RuntimeError> {
-        match self.stack_mut().pop() {
-            Some(v) => Ok(v),
-            None => Err(self.error("Pop with empty stack.")),
+    fn pop(&self) -> Result<ValuePtr, error::RuntimeError> {
+        match self.state_mut().stack.borrow_mut() {
+            Value::Array(a) => match a.pop() {
+                Some(v) => Ok(v),
+                None => Err(self.error("Pop with empty stack.")),
+            },
+            _ => panic!("stack is not an array"),
         }
     }
 
-    fn peek(&self) -> Result<&ValuePtr, error::RuntimeError> {
-        match self.stack().last() {
-            Some(v) => Ok(v),
-            None => Err(self.error("Peek with empty stack.")),
-        }
-    }
-    fn globals(&self) -> &BTreeMap<String, ValuePtr> {
-        match self.globals.borrow() {
-            Value::Map(m) => m,
-            _ => panic!("globals is not a map"),
-        }
-    }
-
-    fn globals_mut(&mut self) -> &mut BTreeMap<String, ValuePtr> {
-        match self.globals.borrow_mut() {
-            Value::Map(m) => m,
-            _ => panic!("globals is not a map"),
+    fn peek(&self) -> Result<ValuePtr, error::RuntimeError> {
+        if let Value::Array(stack) = self.state().stack.borrow() {
+            match stack.last() {
+                Some(v) => Ok(v.clone()),
+                None => Err(self.error("Peek with empty stack.")),
+            }
+        } else {
+            panic!("stack is not an array");
         }
     }
 
@@ -341,7 +348,7 @@ impl Vm {
         error::RuntimeError::new(message, self.current_loc.clone())
     }
 
-    fn binary_op_number<F>(&mut self, op: F) -> Result<(), error::RuntimeError>
+    fn binary_op_number<F>(&self, op: F) -> Result<(), error::RuntimeError>
     where
         F: FnOnce(f64, f64) -> f64,
     {
@@ -355,7 +362,7 @@ impl Vm {
         return Err(self.error("Invalid types for binary op."));
     }
 
-    fn binary_op_string<F>(&mut self, op: F) -> Result<(), error::RuntimeError>
+    fn binary_op_string<F>(&self, op: F) -> Result<(), error::RuntimeError>
     where
         F: FnOnce(String, String) -> String,
     {
@@ -374,34 +381,71 @@ impl Vm {
     }
 
     pub fn run(&mut self, function: Function) -> Result<ValuePtr, error::RuntimeError> {
-        self.run_chunk(function.chunk)
+        let fun_ptr = self.alloc_value(Value::Function(function))?;
+        self.push(fun_ptr.clone());
+        self.state_mut().frames.push(CallFrame {
+            function: fun_ptr,
+            ip: 0,
+            stack_offset: 0, //  self.stack().len(),
+        });
+        self.run_frame()
     }
 
-    pub fn run_chunk(&mut self, chunk: Chunk) -> Result<ValuePtr, error::RuntimeError> {
-        self.ip = 0;
+    fn ip(&self) -> usize {
+        self.state().frames.last().unwrap().ip
+    }
+
+    fn set_ip(&self, ip: usize) {
+        self.state_mut().frames.last_mut().unwrap().ip = ip
+    }
+
+    pub fn run_frame(&mut self) -> Result<ValuePtr, error::RuntimeError> {
+        let fun = {
+            let state = self.state();
+            let top_frame = state.frames.last().unwrap();
+            top_frame.function.clone()
+        };
+        let chunk = match fun.borrow() {
+            Value::Function(f) => &f.chunk,
+            _ => panic!("call frame does not refer to function"),
+        };
+
         loop {
             if self.trace {
                 println!("=== instruction ===");
-                chunk.disassemble_instruction(self.ip)?;
+                chunk.disassemble_instruction(self.ip())?;
                 println!();
                 println!("=== stack ===");
-                for v in self.stack() {
-                    println!("[ {} ]", v.borrow());
+                if let Value::Array(stack) = self.state().stack.borrow() {
+                    for v in stack {
+                        println!("[ {} ]", v.borrow());
+                    }
                 }
                 println!("=== globals ===");
-                for (name, value) in self.globals() {
-                    println!("\"{}\": -> {}", &name, value.borrow());
+                if let Value::Map(globals) = self.state().globals.borrow() {
+                    for (name, value) in globals {
+                        println!("\"{}\": -> {}", &name, value.borrow());
+                    }
                 }
             }
-            self.current_loc = chunk.locs[self.ip].clone();
-            match chunk.code[self.ip] {
+            self.current_loc = chunk.locs[self.ip()].clone();
+            match chunk.code[self.ip()] {
                 OpCode::Return => {
                     let value = self.pop()?;
                     return Ok(value);
                 }
                 OpCode::Constant(index) => {
-                    let value = chunk.constants[index].clone();
-                    self.push_value(value)?;
+                    let value = &chunk.constants[index];
+                    let value_clone = match value {
+                        Value::Nil => Value::Nil,
+                        Value::Bool(b) => Value::Bool(*b),
+                        Value::Number(n) => Value::Number(*n),
+                        Value::String(s) => Value::String(s.to_string()),
+                        Value::Function(_) => panic!("unexpected function in constant table"),
+                        Value::Array(_) => panic!("unexpected array in constant table"),
+                        Value::Map(_) => panic!("unexpected array in constant table"),
+                    };
+                    self.push_value(value_clone)?;
                 }
                 OpCode::Negate => {
                     if let Value::Number(n) = *self.pop()? {
@@ -445,36 +489,44 @@ impl Vm {
                     println!("{}", value);
                 }
                 OpCode::GetGlobal(index) => {
-                    let name_constant = chunk.constants[index].clone();
+                    let name_constant = &chunk.constants[index];
                     if let Value::String(name) = name_constant {
-                        let value = match self.globals().get(&name) {
-                            Some(v) => v,
-                            None => {
-                                return Err(self.error(&format!("Undefined variable {}", &name)));
-                            }
-                        };
-                        self.push(value.clone());
+                        if let Value::Map(globals) = self.state().globals.borrow() {
+                            let value = match globals.get(name) {
+                                Some(v) => v,
+                                None => {
+                                    return Err(self.error(&format!("Undefined variable {}", name)));
+                                }
+                            };
+                            self.push(value.clone());
+                        }
                     } else {
                         return Err(self.error("global name must be string"));
                     }
                 }
                 OpCode::DefineGlobal(index) => {
-                    let name_constant = chunk.constants[index].clone();
+                    let name_constant = &chunk.constants[index];
                     if let Value::String(name) = name_constant {
                         let value = self.pop()?;
-                        self.globals_mut().insert(name, value);
+                        if let Value::Map(m) = self.state_mut().globals.borrow_mut() {
+                            m.insert(name.to_string(), value);
+                        }
                     } else {
                         return Err(self.error("global name must be string"));
                     }
                 }
                 OpCode::SetGlobal(index) => {
-                    let name_constant = chunk.constants[index].clone();
+                    let name_constant = &chunk.constants[index];
                     if let Value::String(name) = name_constant {
                         let value = self.pop()?;
-                        match self.globals_mut().get_mut(&name) {
-                            Some(v) => *v = value,
-                            None => {
-                                return Err(self.error(&format!("Undefined variable '{}'", name)));
+                        if let Value::Map(m) = self.state_mut().globals.borrow_mut() {
+                            match m.get_mut(name) {
+                                Some(v) => *v = value,
+                                None => {
+                                    return Err(
+                                        self.error(&format!("Undefined variable '{}'", name))
+                                    );
+                                }
                             }
                         }
                     } else {
@@ -483,26 +535,30 @@ impl Vm {
                 }
                 OpCode::JumpIfFalse(offset) => {
                     if self.peek()?.falsey() {
-                        self.ip = (self.ip as i16).checked_add(offset).unwrap() as usize;
+                        self.set_ip((self.ip() as i16).checked_add(offset).unwrap() as usize);
                     }
                 }
                 OpCode::Jump(offset) => {
-                    self.ip = (self.ip as i16).checked_add(offset).unwrap() as usize;
+                    self.set_ip((self.ip() as i16).checked_add(offset).unwrap() as usize);
                 }
                 OpCode::Pop => {
                     self.pop()?;
                 }
                 OpCode::GetLocal(idx) => {
-                    self.push(self.stack()[idx].clone());
+                    if let Value::Array(stack) = self.state().stack.borrow() {
+                        self.push(stack[idx].clone());
+                    }
                 }
-                OpCode::SetLocal(idx) => {
-                    self.stack_mut()[idx] = self.peek()?.clone();
-                }
+                OpCode::SetLocal(idx) => match self.state_mut().stack.borrow_mut() {
+                    Value::Array(a) => a[idx] = self.peek()?.clone(),
+                    _ => panic!("stack is not an array"),
+                },
             }
-            self.ip = self.ip + 1;
-            if self.ip == chunk.code.len() {
+            let new_ip = self.ip() + 1;
+            if new_ip == chunk.code.len() {
                 return Ok(self.alloc_value(Value::Nil)?);
             }
+            self.set_ip(new_ip);
         }
     }
 }
@@ -547,15 +603,24 @@ mod tests {
             fn $name() -> Result<(), error::Error> {
                 let mut vm = Vm::new();
                 //vm.enable_tracing();
-                let mut chunk = Chunk::new();
+                let mut fun = Function::new(0, "<test>");
                 let mut loc = error::Location::default();
+                let chunk = &mut fun.chunk;
                 $(
                     run_test_add_opcode!(chunk, $opcode, loc.clone() $(, $param)?);
                     loc.line = loc.line + 1;
                 )*
-                //chunk.disassemble();
+                //fun.chunk.disassemble();
+                let function = vm.alloc_value(Value::Function(fun))?;
+                vm.push(function.clone());
+                vm.state.borrow_mut().frames.push(CallFrame {
+                    function,
+                    ip: 0,
+                    stack_offset: 0,
+                });
+
                 let expected: Result::<Value, error::RuntimeError> = $expected;
-                match vm.run_chunk(chunk){
+                match vm.run_frame(){
                     Ok(v) => {
                         assert!(expected.is_ok());
                         assert_eq!(*v, expected.ok().unwrap());
