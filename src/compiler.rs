@@ -137,7 +137,7 @@ impl Compiler {
             }
             ast::Stmt::Function(f) => {
                 // Declare variable
-                let function = self.compile(&f.body, f.params.len(), &f.name);
+                let _function = self.compile(&f.body, f.params.len(), &f.name);
                 // Reserve slot 0 for the function object.
                 self.state
                     .locals

@@ -65,6 +65,7 @@ fn run_vm(source: &str, vm: &mut vm::Vm) -> Result<(), error::Error> {
     Ok(())
 }
 
+#[allow(unused)]
 fn run_file_interpreter(filename: &str) -> Result<(), error::Error> {
     let mut file = File::open(filename)?;
     let mut contents = String::new();
@@ -83,6 +84,7 @@ fn run_file_vm(filename: &str) -> Result<(), error::Error> {
     Ok(())
 }
 
+#[allow(unused)]
 fn run_prompt_interpreter() -> Result<(), error::Error> {
     let mut interpreter = Interpreter::new();
     loop {

@@ -1,7 +1,4 @@
-use std::{
-    collections::{BTreeMap, HashMap},
-    fmt::Display,
-};
+use std::{collections::BTreeMap, fmt::Display};
 
 use by_address::ByAddress;
 
@@ -270,14 +267,14 @@ impl gc::AllocObject<VmTypeId> for Value {
 impl gc::AllocHeader for VmHeader {
     type TypeId = VmTypeId;
 
-    fn new<T: gc::AllocObject<Self::TypeId>>(size: usize, mark: gc::Mark) -> Self {
+    fn new<T: gc::AllocObject<Self::TypeId>>(_size: usize, mark: gc::Mark) -> Self {
         Self {
             mark,
             ty: T::TYPE_ID,
         }
     }
 
-    fn new_array<T: gc::AllocObject<Self::TypeId>>(size: usize, mark: gc::Mark) -> Self {
+    fn new_array<T: gc::AllocObject<Self::TypeId>>(_size: usize, mark: gc::Mark) -> Self {
         Self {
             mark,
             ty: T::TYPE_ID,

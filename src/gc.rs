@@ -367,16 +367,16 @@ mod tests {
     impl AllocHeader for TestHeader {
         type TypeId = TestTypeId;
 
-        fn new<T: AllocObject<Self::TypeId>>(size: usize, mark: Mark) -> Self {
+        fn new<T: AllocObject<Self::TypeId>>(_size: usize, mark: Mark) -> Self {
             Self {
-                mark: Mark::Allocated,
+                mark,
                 ty: T::TYPE_ID,
             }
         }
 
-        fn new_array<T: AllocObject<Self::TypeId>>(size: usize, mark: Mark) -> Self {
+        fn new_array<T: AllocObject<Self::TypeId>>(_size: usize, mark: Mark) -> Self {
             Self {
-                mark: Mark::Allocated,
+                mark,
                 ty: T::TYPE_ID,
             }
         }
