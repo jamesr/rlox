@@ -3,7 +3,8 @@ use std::ops::{AddAssign, SubAssign};
 use crate::{
     ast,
     error::{self, ParseError},
-    parser, vm,
+    gc, parser, vm,
+    vmgc::{self, Function},
 };
 
 #[derive(Debug)]
@@ -27,16 +28,18 @@ impl State {
     }
 }
 
-pub struct Compiler {
+pub struct Compiler<'a> {
     location_table: parser::LocationTable,
     state: State,
+    heap: &'a mut vmgc::Heap,
 }
 
-impl Compiler {
-    pub fn new(location_table: parser::LocationTable) -> Self {
+impl<'a> Compiler<'a> {
+    pub fn new(location_table: parser::LocationTable, heap: &'a mut vmgc::Heap) -> Self {
         Self {
             location_table,
             state: State::new(),
+            heap,
         }
     }
 
@@ -45,18 +48,20 @@ impl Compiler {
         stmts: &[Box<ast::Stmt>],
         arity: usize,
         name: &str,
-    ) -> Result<vm::Function, error::Error> {
-        let mut function = vm::Function::new(arity, name);
+    ) -> Result<Function, error::Error> {
+        let mut function = Function::new(arity, name);
         for stmt in stmts {
             self.compile_stmt(stmt, &mut function)?;
         }
+        function.chunk.add_nil(error::Location::default());
+        function.chunk.add_return(error::Location::default());
         Ok(function)
     }
 
     fn compile_stmt(
         &mut self,
         stmt: &ast::Stmt,
-        function: &mut vm::Function,
+        function: &mut vmgc::Function,
     ) -> Result<(), error::Error> {
         let loc = match self.location_table.get(&stmt.id()) {
             Some(loc) => loc.clone(),
@@ -90,7 +95,9 @@ impl Compiler {
                     None => function.chunk.add_nil(loc.clone()),
                 }
                 if self.state.scope_depth == 0 {
-                    function.chunk.add_define_global(&v.name, loc);
+                    function
+                        .chunk
+                        .add_define_global(self.alloc_string(&v.name)?, loc);
                 } else {
                     self.state.locals.last_mut().unwrap().1 =
                         VariableState::Local(self.state.scope_depth);
@@ -137,12 +144,18 @@ impl Compiler {
             }
             ast::Stmt::Function(f) => {
                 // Declare variable
-                let _function = self.compile(&f.body, f.params.len(), &f.name);
-                // Reserve slot 0 for the function object.
-                self.state
-                    .locals
-                    .push((String::new(), VariableState::Local(0)));
-                // Assign function to variable
+                self.declare_variable(f.name.to_string(), loc.clone())?;
+                // Mark variable as initialized.
+                self.resolve_variable(&f.name);
+                // Compile function.
+                let fun = self.compile(&f.body, f.params.len(), &f.name)?;
+                // Assign function to constant.
+                let fun_ptr = self
+                    .heap
+                    .alloc_cell(fun)
+                    .map_err(|_| error::ParseError::new("Could not allocate value", loc.clone()))?;
+                let fun_val = self.heap.alloc_cell(vmgc::Value::Function(fun_ptr))?;
+                function.chunk.add_constant(fun_val, loc);
             }
             ast::Stmt::Class(_) => todo!(),
         }
@@ -152,7 +165,7 @@ impl Compiler {
     fn compile_expr(
         &mut self,
         expr: &ast::Expr,
-        function: &mut vm::Function,
+        function: &mut Function,
     ) -> Result<(), error::Error> {
         let loc = match self.location_table.get(&expr.id()) {
             Some(loc) => loc.clone(),
@@ -173,12 +186,12 @@ impl Compiler {
                 }
             }
             ast::Expr::Literal(l) => match &l.value {
-                ast::LiteralValue::Number(n) => {
-                    function.chunk.add_constant(vm::Value::Number(*n), loc)
-                }
-                ast::LiteralValue::String(s) => function
+                ast::LiteralValue::Number(n) => function
                     .chunk
-                    .add_constant(vm::Value::String(s.clone()), loc),
+                    .add_constant(self.alloc_value(vmgc::Value::Number(*n))?, loc),
+                ast::LiteralValue::String(s) => {
+                    function.chunk.add_constant(self.alloc_string(&s)?, loc)
+                }
                 ast::LiteralValue::Bool(b) => match b {
                     true => function.chunk.add_true(loc),
                     false => function.chunk.add_false(loc),
@@ -223,7 +236,9 @@ impl Compiler {
             ast::Expr::Variable(v) => {
                 match self.resolve_variable(&v.name) {
                     VariableState::Local(depth) => function.chunk.add_get_local(depth, loc),
-                    VariableState::Global => function.chunk.add_get_global(&v.name, loc),
+                    VariableState::Global => function
+                        .chunk
+                        .add_get_global(self.alloc_string(&v.name)?, loc),
                     VariableState::Declared => {
                         return Err(error::Error::Parse(ParseError::new(
                             "Can't read local variable in its own initializer.",
@@ -236,7 +251,9 @@ impl Compiler {
                 self.compile_expr(&a.value, function)?;
                 match self.resolve_variable(&a.name) {
                     VariableState::Local(depth) => function.chunk.add_set_local(depth, loc),
-                    VariableState::Global => function.chunk.add_set_global(&a.name, loc),
+                    VariableState::Global => function
+                        .chunk
+                        .add_set_global(self.alloc_string(&a.name)?, loc),
                     VariableState::Declared => panic!("declared variable found in assignment"),
                 };
             }
@@ -272,6 +289,10 @@ impl Compiler {
                     )));
                 }
             },
+            ast::Expr::Call(c) => {
+                //self.compile_expr(&c.callee, function)?;
+                function.chunk.add_call(c.args.len(), loc);
+            }
             _ => {
                 return Err(error::Error::Parse(ParseError::new(
                     "unknown expression kind",
@@ -337,6 +358,14 @@ impl Compiler {
         }
         VariableState::Global
     }
+
+    fn alloc_string(&mut self, str: &str) -> Result<vmgc::ValuePtr, gc::AllocError> {
+        self.alloc_value(vmgc::Value::String(str.to_string()))
+    }
+
+    fn alloc_value(&mut self, val: vmgc::Value) -> Result<vmgc::ValuePtr, gc::AllocError> {
+        self.heap.alloc_cell(val)
+    }
 }
 
 #[cfg(test)]
@@ -348,12 +377,17 @@ mod tests {
         ($name:ident, $expr:expr, [ $($code:expr),* ], [ $($constant:expr),* ]) => {
             #[test]
             fn $name() -> Result<(), error::Error> {
+                let mut heap = vmgc::Heap::new();
                 let expr = $expr;
-                let mut compiler = Compiler::new(parser::LocationTable::new());
-                let mut function = vm::Function::new(0, "<script>");
+                let mut compiler = Compiler::new(parser::LocationTable::new(), &mut heap);
+                let mut function = Function::new(0, "<script>");
                 compiler.compile_expr(&expr, &mut function)?;
                 assert_eq!(function.chunk.code, vec![ $($code),* ]);
-                assert_eq!(function.chunk.constants, vec![ $($constant),* ]);
+                let expected_constants : Vec<vmgc::Value> = vec![$($constant),*];
+                assert_eq!(function.chunk.constants.len(), expected_constants.len());
+                for i in 0..expected_constants.len() {
+                    assert_eq!(&expected_constants[i], function.chunk.constants[i].borrow());
+                }
                 Ok(())
             }
 
@@ -364,7 +398,7 @@ mod tests {
         compile_constant,
         ast::Expr::literal_number(3.4),
         [vm::OpCode::Constant(0)],
-        [vm::Value::Number(3.4)]
+        [vmgc::Value::Number(3.4)]
     );
 
     compile_expr_test!(
@@ -375,7 +409,7 @@ mod tests {
         ),
         // - 1.2
         [vm::OpCode::Constant(0), vm::OpCode::Negate],
-        [vm::Value::Number(1.2)]
+        [vmgc::Value::Number(1.2)]
     );
 
     compile_expr_test!(
@@ -402,7 +436,7 @@ mod tests {
             vm::OpCode::Constant(1),
             vm::OpCode::Add
         ],
-        [vm::Value::Number(1.2), vm::Value::Number(4.7)]
+        [vmgc::Value::Number(1.2), vmgc::Value::Number(4.7)]
     );
 
     compile_expr_test!(
@@ -418,8 +452,8 @@ mod tests {
             vm::OpCode::Add
         ],
         [
-            vm::Value::String("foo".to_string()),
-            vm::Value::String("bar".to_string())
+            vmgc::Value::String("foo".to_string()),
+            vmgc::Value::String("bar".to_string())
         ]
     );
 
@@ -435,7 +469,7 @@ mod tests {
             vm::OpCode::Constant(1),
             vm::OpCode::Less
         ],
-        [vm::Value::Number(2.1), vm::Value::Number(4.2)]
+        [vmgc::Value::Number(2.1), vmgc::Value::Number(4.2)]
     );
 
     compile_expr_test!(
@@ -451,7 +485,7 @@ mod tests {
             vm::OpCode::Less,
             vm::OpCode::Not
         ],
-        [vm::Value::Number(2.1), vm::Value::Number(4.2)]
+        [vmgc::Value::Number(2.1), vmgc::Value::Number(4.2)]
     );
 
     compile_expr_test!(
@@ -491,14 +525,19 @@ mod tests {
         ($name:ident, $stmts:expr, [ $($code:expr),* ], [ $($constant:expr),* ]) => {
             #[test]
             fn $name() -> Result<(), error::Error> {
+                let mut heap = vmgc::Heap::new();
                 let stmts = $stmts;
-                let mut compiler = Compiler::new(parser::LocationTable::new());
-                let mut function = vm::Function::new(0, "<script>");
+                let mut compiler = Compiler::new(parser::LocationTable::new(), &mut heap);
+                let mut function = Function::new(0, "<script>");
                 for stmt in stmts {
                     compiler.compile_stmt(&stmt, &mut function)?;
                 }
                 assert_eq!(function.chunk.code, vec![ $($code),* ]);
-                assert_eq!(function.chunk.constants, vec![ $($constant),* ]);
+                let expected_constants : Vec<vmgc::Value> = vec![$($constant),*];
+                assert_eq!(function.chunk.constants.len(), expected_constants.len());
+                for i in 0..expected_constants.len() {
+                    assert_eq!(&expected_constants[i], function.chunk.constants[i].borrow());
+                }
                 Ok(())
             }
 
@@ -509,7 +548,7 @@ mod tests {
         compile_print_constant,
         [ast::Stmt::print(Box::new(ast::Expr::literal_number(0.5),))],
         [vm::OpCode::Constant(0), vm::OpCode::Print],
-        [vm::Value::Number(0.5)]
+        [vmgc::Value::Number(0.5)]
     );
 
     compile_stmts_test!(
@@ -525,7 +564,7 @@ mod tests {
             ast::Expr::literal_number(1.2)
         )))],
         [vm::OpCode::Constant(0), vm::OpCode::Return],
-        [vm::Value::Number(1.2)]
+        [vmgc::Value::Number(1.2)]
     );
     compile_stmts_test!(
         compile_if_literal,

@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use crate::eval;
+use crate::{eval, gc};
 
 #[derive(Debug)]
 pub enum Error {
@@ -138,6 +138,12 @@ impl From<ParseError> for Error {
 impl From<RuntimeError> for Error {
     fn from(e: RuntimeError) -> Self {
         Error::Runtime(e)
+    }
+}
+
+impl From<gc::AllocError> for Error {
+    fn from(_: gc::AllocError) -> Self {
+        Error::Runtime(RuntimeError::new("Allocation failed", Location::default()))
     }
 }
 

@@ -57,11 +57,20 @@ fn run_vm(source: &str, vm: &mut vm::Vm) -> Result<(), error::Error> {
     // to the interpreter / VM to break the resolver<->interpreter dependency.
     //let mut resolver = resolver::Resolver::new(interpreter, &location_table);
     //resolver.resolve(&stmts)?;
-    let mut compiler = compiler::Compiler::new(location_table);
-    let function = compiler.compile(&stmts, 0, "<script>")?;
-    //chunk.disassemble()?;
 
-    let result = vm.run(function)?;
+    // Borrow the heap from the VM so the compiler can allocate values.
+    let mut heap = vm.take_heap();
+    let function = {
+        let mut compiler = compiler::Compiler::new(location_table, &mut heap);
+        compiler.compile(&stmts, 0, "<script>")?
+    };
+    let fun_ptr = heap.alloc_cell(function)?;
+    // Give the heap back to the VM.
+    vm.set_heap(heap);
+    //chunk.disassemble()?;
+    vm.enable_tracing();
+
+    let result = vm.run(fun_ptr)?;
     println!("statements evaluted to {:?}", result);
     Ok(())
 }

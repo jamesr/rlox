@@ -1,5 +1,6 @@
 use std::alloc::Layout;
 use std::cell::{Cell, RefCell};
+use std::fmt::Debug;
 use std::mem::size_of;
 use std::ptr::NonNull;
 use std::{collections::HashSet, marker::PhantomData};
@@ -11,6 +12,17 @@ pub struct Heap<H> {
     all_allocs: RefCell<Vec<NonNull<H>>>,
     tracing: bool,
     _phantom: PhantomData<H>,
+}
+
+impl<H> Default for Heap<H> {
+    fn default() -> Self {
+        Self {
+            roots: Default::default(),
+            all_allocs: Default::default(),
+            tracing: Default::default(),
+            _phantom: Default::default(),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, PartialOrd)]
@@ -178,7 +190,7 @@ impl<H: AllocHeader> AllocRaw for Heap<H> {
     }
 }
 
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(PartialEq, PartialOrd)]
 pub struct CellPtr<T: Sized> {
     inner: Cell<RawPtr<T>>,
 }
@@ -220,6 +232,12 @@ impl<T: Sized> std::ops::Deref for CellPtr<T> {
 impl<T: Sized> std::ops::DerefMut for CellPtr<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.borrow_mut()
+    }
+}
+
+impl<T: Sized + Debug> Debug for CellPtr<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("CellPtr -> {:?}", self.borrow()))
     }
 }
 
