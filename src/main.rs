@@ -64,11 +64,11 @@ fn run_vm(source: &str, vm: &mut vm::Vm) -> Result<(), error::Error> {
         let mut compiler = compiler::Compiler::new(location_table, &mut heap);
         compiler.compile(&stmts, 0, "<script>")?
     };
+    //function.chunk.disassemble()?;
     let fun_ptr = heap.alloc_cell(function)?;
     // Give the heap back to the VM.
     vm.set_heap(heap);
-    //chunk.disassemble()?;
-    vm.enable_tracing();
+    //vm.enable_tracing();
 
     let result = vm.run(fun_ptr)?;
     println!("statements evaluted to {:?}", result);

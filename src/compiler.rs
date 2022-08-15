@@ -22,7 +22,7 @@ struct State {
 impl State {
     fn new() -> Self {
         Self {
-            locals: vec![],
+            locals: vec![("".to_string(), VariableState::Declared)], // Reserve first slot for function.
             scope_depth: 0,
         }
     }
@@ -290,7 +290,7 @@ impl<'a> Compiler<'a> {
                 }
             },
             ast::Expr::Call(c) => {
-                //self.compile_expr(&c.callee, function)?;
+                self.compile_expr(&c.callee, function)?;
                 function.chunk.add_call(c.args.len(), loc);
             }
             _ => {

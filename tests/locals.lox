@@ -10,3 +10,4 @@ var global = "global";
   print "otherlocal is: " + otherlocal;
   print "global is: " + global;
 }
+

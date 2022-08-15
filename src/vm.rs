@@ -38,7 +38,7 @@ pub enum OpCode {
 struct CallFrame {
     function: FunctionPtr,
     ip: usize,
-    stack_offset: usize,
+    frame_stack_base: usize,
 }
 
 #[derive(Debug)]
@@ -289,6 +289,10 @@ impl Vm {
         }
     }
 
+    fn pop_to(&self, offset: usize) {
+        self.state_mut().stack.borrow_mut().truncate(offset);
+    }
+
     fn peek(&self) -> Result<ValuePtr, error::RuntimeError> {
         match self.state().stack.borrow().last() {
             Some(v) => Ok(v.clone()),
@@ -343,10 +347,11 @@ impl Vm {
 
     fn push_frame(&mut self, function: vmgc::FunctionPtr) -> Result<(), error::RuntimeError> {
         self.push(self.alloc_value(Value::Function(function.clone()))?);
+        let frame_stack_base = self.state().stack.borrow().len();
         self.state_mut().frames.push(CallFrame {
             function,
             ip: 0,
-            stack_offset: 0, //  self.stack().len(),
+            frame_stack_base,
         });
         Ok(())
     }
@@ -407,13 +412,13 @@ impl Vm {
                 OpCode::Return => {
                     // Pop call frame
                     let value = self.pop()?;
-                    self.state.borrow_mut().frames.pop();
+                    let frame = self.state.borrow_mut().frames.pop().unwrap();
                     if self.state.borrow().frames.is_empty() {
                         self.pop()?; // Pop function
                         self.push(value);
                         return Ok(());
                     }
-                    // TODO - Pop parameters and locals from stack.
+                    self.pop_to(frame.frame_stack_base);
                     self.push(value);
                 }
                 OpCode::Constant(index) => {
@@ -608,7 +613,6 @@ mod tests {
                 match vm.run_frame(){
                     Ok(()) => {
                         assert!(expected.is_ok());
-                        println!("stack is {:?}", vm.state.borrow().stack);
                         assert_eq!(vm.pop()?.borrow(), &expected.ok().unwrap());
                     },
                     Err(e) => {
