@@ -1,9 +1,9 @@
-use std::{cell::RefCell, collections::BTreeMap, ops::AddAssign};
+use std::{cell::RefCell, collections::BTreeMap, ops::AddAssign, time::Instant};
 
 use crate::{
     error,
     gc::Heap,
-    vmgc::{self, ArrayPtr, Function, FunctionPtr, MapPtr, Value, ValuePtr},
+    vmgc::{self, ArrayPtr, Function, FunctionPtr, MapPtr, Value},
 };
 
 #[derive(PartialEq, PartialOrd, Clone, Copy, Debug)]
@@ -44,7 +44,7 @@ struct CallFrame {
 #[derive(Debug)]
 pub struct Chunk {
     pub code: Vec<OpCode>,
-    pub constants: Vec<ValuePtr>,
+    pub constants: Vec<Value>,
     locs: Vec<error::Location>,
 }
 
@@ -70,7 +70,7 @@ impl Chunk {
         self.locs.push(loc);
     }
 
-    pub fn add_constant(&mut self, v: ValuePtr, loc: error::Location) {
+    pub fn add_constant(&mut self, v: Value, loc: error::Location) {
         self.add_opcode(OpCode::Constant(self.constants.len()), loc);
         self.constants.push(v);
     }
@@ -83,17 +83,17 @@ impl Chunk {
         self.add_opcode(OpCode::SetLocal(depth), loc);
     }
 
-    pub fn add_get_global(&mut self, name: ValuePtr, loc: error::Location) {
+    pub fn add_get_global(&mut self, name: Value, loc: error::Location) {
         self.add_opcode(OpCode::GetGlobal(self.constants.len()), loc);
         self.constants.push(name);
     }
 
-    pub fn add_define_global(&mut self, name: ValuePtr, loc: error::Location) {
+    pub fn add_define_global(&mut self, name: Value, loc: error::Location) {
         self.add_opcode(OpCode::DefineGlobal(self.constants.len()), loc);
         self.constants.push(name);
     }
 
-    pub fn add_set_global(&mut self, name: ValuePtr, loc: error::Location) {
+    pub fn add_set_global(&mut self, name: Value, loc: error::Location) {
         self.add_opcode(OpCode::SetGlobal(self.constants.len()), loc);
         self.constants.push(name);
     }
@@ -221,8 +221,13 @@ impl Vm {
         //heap.enable_tracing(true);
         let stack = heap.alloc_cell(vec![]).unwrap();
         heap.add_root(stack.clone());
-        let globals = heap.alloc_cell(BTreeMap::new()).unwrap();
+        let mut globals = heap.alloc_cell(BTreeMap::new()).unwrap();
         heap.add_root(globals.clone());
+        let clock = std::rc::Rc::new(Clock::new());
+        globals.insert(
+            "clock".to_string(),
+            Value::NativeFunction(by_address::ByAddress(clock)),
+        );
         Self {
             state: RefCell::new(State {
                 frames: vec![],
@@ -237,19 +242,6 @@ impl Vm {
 
     pub fn enable_tracing(&mut self) {
         self.trace = true;
-    }
-
-    pub fn alloc_value(&self, v: Value) -> Result<ValuePtr, error::RuntimeError> {
-        self.state_mut()
-            .heap
-            .borrow_mut()
-            .alloc_cell(v)
-            .map_err(|e| {
-                error::RuntimeError::new(
-                    &format!("Allocation error: {:?}", e),
-                    error::Location::default(),
-                )
-            })
     }
 
     pub fn alloc_fun(&self, f: Function) -> Result<FunctionPtr, error::RuntimeError> {
@@ -273,16 +265,11 @@ impl Vm {
         self.state.borrow_mut()
     }
 
-    fn push(&self, v: ValuePtr) {
+    fn push(&self, v: Value) {
         self.state_mut().stack.borrow_mut().push(v);
     }
 
-    fn push_value(&self, v: Value) -> Result<(), error::RuntimeError> {
-        let ptr = self.alloc_value(v)?;
-        Ok(self.push(ptr))
-    }
-
-    fn pop(&self) -> Result<ValuePtr, error::RuntimeError> {
+    fn pop(&self) -> Result<Value, error::RuntimeError> {
         match self.state_mut().stack.borrow_mut().pop() {
             Some(v) => Ok(v),
             None => Err(self.error("Pop with empty stack.")),
@@ -293,14 +280,14 @@ impl Vm {
         self.state_mut().stack.borrow_mut().truncate(offset);
     }
 
-    fn peek(&self) -> Result<ValuePtr, error::RuntimeError> {
+    fn peek(&self) -> Result<Value, error::RuntimeError> {
         match self.state().stack.borrow().last() {
             Some(v) => Ok(v.clone()),
             None => Err(self.error("Peek with empty stack.")),
         }
     }
 
-    fn peek_nth(&self, offset: usize) -> Result<ValuePtr, error::RuntimeError> {
+    fn peek_nth(&self, offset: usize) -> Result<Value, error::RuntimeError> {
         let state_ref = self.state();
         let stack_ref = state_ref.stack.borrow();
         if offset > stack_ref.len() {
@@ -318,9 +305,9 @@ impl Vm {
         F: FnOnce(f64, f64) -> f64,
     {
         // The right hand side is at the top of the stack and the left hand side is below.
-        if let Value::Number(rhs) = self.pop()?.borrow() {
-            if let Value::Number(lhs) = self.pop()?.borrow() {
-                self.push_value(Value::Number(op(*lhs, *rhs)))?;
+        if let Value::Number(rhs) = self.pop()? {
+            if let Value::Number(lhs) = self.pop()? {
+                self.push(Value::Number(op(lhs, rhs)));
                 return Ok(());
             }
         }
@@ -332,10 +319,10 @@ impl Vm {
         F: FnOnce(String, String) -> String,
     {
         // The right hand side is at the top of the stack and the left hand side is below.
-        if let Value::String(rhs) = self.pop()?.borrow() {
-            if let Value::String(lhs) = self.pop()?.borrow() {
+        if let Value::String(rhs) = self.pop()? {
+            if let Value::String(lhs) = self.pop()? {
                 // TODO - extra string copies here
-                self.push_value(Value::String(op(lhs.to_string(), rhs.to_string())))?;
+                self.push(Value::String(op(lhs.to_string(), rhs.to_string())));
                 return Ok(());
             }
         }
@@ -346,7 +333,7 @@ impl Vm {
     }
 
     fn push_frame(&mut self, function: vmgc::FunctionPtr) -> Result<(), error::RuntimeError> {
-        self.push(self.alloc_value(Value::Function(function.clone()))?);
+        self.push(Value::Function(function.clone()));
         let frame_stack_base = self.state().stack.borrow().len();
         self.state_mut().frames.push(CallFrame {
             function,
@@ -399,11 +386,11 @@ impl Vm {
                 }
                 println!("=== stack ===");
                 for v in &*self.state().stack.borrow() {
-                    println!("[ {} ]", v.borrow());
+                    println!("[ {} ]", v);
                 }
                 println!("=== globals ===");
                 for (name, value) in &*self.state().globals {
-                    println!("\"{}\": -> {}", &name, value.borrow());
+                    println!("\"{}\": -> {}", &name, value);
                 }
                 println!();
             }
@@ -426,13 +413,13 @@ impl Vm {
                     self.push(value.clone());
                 }
                 OpCode::Negate => {
-                    if let Value::Number(n) = *self.pop()? {
-                        self.push_value(Value::Number(-n))?;
+                    if let Value::Number(n) = self.pop()? {
+                        self.push(Value::Number(-n));
                     } else {
                         return Err(self.error("Operand must be a number."));
                     }
                 }
-                OpCode::Add => match self.peek()?.borrow() {
+                OpCode::Add => match self.peek()? {
                     Value::Number(_) => self.binary_op_number(|lhs, rhs| lhs + rhs),
                     Value::String(_) => self.binary_op_string(|lhs, rhs| lhs + &rhs),
                     _ => return Err(self.error("Operands must be two strings or two numbers.")),
@@ -440,34 +427,34 @@ impl Vm {
                 OpCode::Subtract => self.binary_op_number(|lhs, rhs| lhs - rhs)?,
                 OpCode::Multiply => self.binary_op_number(|lhs, rhs| lhs * rhs)?,
                 OpCode::Divide => self.binary_op_number(|lhs, rhs| lhs / rhs)?,
-                OpCode::Nil => self.push_value(Value::Nil)?,
-                OpCode::True => self.push_value(Value::Bool(true))?,
-                OpCode::False => self.push_value(Value::Bool(false))?,
+                OpCode::Nil => self.push(Value::Nil),
+                OpCode::True => self.push(Value::Bool(true)),
+                OpCode::False => self.push(Value::Bool(false)),
                 OpCode::Not => {
                     let val = self.pop()?;
-                    self.push_value(Value::Bool(val.falsey()))?;
+                    self.push(Value::Bool(val.falsey()));
                 }
                 OpCode::Equal => {
-                    let rhs = &*self.pop()?;
-                    let lhs = &*self.pop()?;
-                    self.push_value(Value::Bool(lhs == rhs))?;
+                    let rhs = self.pop()?;
+                    let lhs = self.pop()?;
+                    self.push(Value::Bool(lhs == rhs));
                 }
                 OpCode::Greater => {
-                    let rhs = &*self.pop()?;
-                    let lhs = &*self.pop()?;
-                    self.push_value(Value::Bool(lhs > rhs))?;
+                    let rhs = self.pop()?;
+                    let lhs = self.pop()?;
+                    self.push(Value::Bool(lhs > rhs));
                 }
                 OpCode::Less => {
-                    let rhs = &*self.pop()?;
-                    let lhs = &*self.pop()?;
-                    self.push_value(Value::Bool(lhs < rhs))?;
+                    let rhs = self.pop()?;
+                    let lhs = self.pop()?;
+                    self.push(Value::Bool(lhs < rhs));
                 }
                 OpCode::Print => {
-                    let value = &*self.pop()?;
+                    let value = self.pop()?;
                     println!("{}", value);
                 }
                 OpCode::GetGlobal(index) => {
-                    let name_constant = chunk.constants[index].borrow();
+                    let name_constant = &chunk.constants[index];
                     if let Value::String(name) = name_constant {
                         let value = {
                             let globals = &self.state.borrow().globals;
@@ -484,7 +471,7 @@ impl Vm {
                     }
                 }
                 OpCode::DefineGlobal(index) => {
-                    let name_constant = chunk.constants[index].borrow();
+                    let name_constant = &chunk.constants[index];
                     if let Value::String(name) = name_constant {
                         let value = self.pop()?;
                         self.state_mut()
@@ -496,7 +483,7 @@ impl Vm {
                     }
                 }
                 OpCode::SetGlobal(index) => {
-                    let name_constant = chunk.constants[index].borrow();
+                    let name_constant = &chunk.constants[index];
                     if let Value::String(name) = name_constant {
                         let value = self.pop()?;
                         match self.state_mut().globals.borrow_mut().get_mut(name) {
@@ -530,12 +517,22 @@ impl Vm {
                 }
                 OpCode::Call(args) => {
                     let callee = self.peek_nth(args)?;
-                    if let Value::Function(f) = callee.borrow() {
-                        self.push_frame(f.clone())?;
-                    } else {
-                        return Err(
-                            self.error(&format!("tried to call a non-function {:?}", callee))
-                        );
+                    match callee {
+                        Value::Function(f) => {
+                            self.push_frame(f.clone())?;
+                        }
+                        Value::NativeFunction(f) => {
+                            let arg_vec = (0..args)
+                                .map(|i| self.peek_nth(i))
+                                .collect::<Result<Vec<_>, _>>()?;
+                            let ret = f.0.call(arg_vec);
+                            self.push(ret);
+                        }
+                        _ => {
+                            return Err(
+                                self.error(&format!("tried to call a non-function {:?}", callee))
+                            );
+                        }
                     }
                 }
             }
@@ -548,6 +545,28 @@ impl Vm {
 
     pub fn set_heap(&mut self, heap: vmgc::Heap) {
         self.state.borrow_mut().heap.replace(heap);
+    }
+}
+
+#[derive(Debug)]
+struct Clock {
+    start: Instant,
+}
+
+impl Clock {
+    fn new() -> Clock {
+        Clock {
+            start: Instant::now(),
+        }
+    }
+}
+
+impl vmgc::Callable for Clock {
+    fn call(&self, _args: Vec<Value>) -> Value {
+        Value::Number(self.start.elapsed().as_secs_f64())
+    }
+    fn arity(&self) -> usize {
+        0
     }
 }
 
@@ -568,8 +587,7 @@ mod tests {
     #[test]
     fn disassemble_constant() -> Result<(), error::Error> {
         let mut chunk = Chunk::new();
-        let mut heap = vmgc::Heap::new();
-        let value = heap.alloc_cell(Value::Number(4.3))?;
+        let value = Value::Number(4.3);
         chunk.add_constant(value, error::Location::default());
         chunk.disassemble()?;
         Ok(())
@@ -580,8 +598,8 @@ mod tests {
             $chunk.patch_jump($param)
         };
         ($chunk:ident, $opcode:ident, $heap:expr, $loc:expr, $param:expr) => {
-            let ptr = $heap.alloc_cell($param)?;
-            $chunk.$opcode(ptr, $loc);
+            //let ptr = $heap.alloc_cell($param)?;
+            $chunk.$opcode($param, $loc);
         };
         ($chunk:ident, $opcode:ident, $heap:expr, $loc:expr) => {
             $chunk.$opcode($loc);
@@ -597,14 +615,12 @@ mod tests {
                 let mut fun = Function::new(0, "<test>");
                 let mut loc = error::Location::default();
                 let chunk = &mut fun.chunk;
-                let mut heap = vm.take_heap();
                 {
                     $(
                         run_test_add_opcode!(chunk, $opcode, heap, loc.clone() $(, $param)?);
                         loc.line = loc.line + 1;
                     )*
                 }
-                vm.set_heap(heap);
                 //fun.chunk.disassemble();
                 let function = vm.alloc_fun(fun)?;
                 vm.push_frame(function)?;
@@ -613,7 +629,7 @@ mod tests {
                 match vm.run_frame(){
                     Ok(()) => {
                         assert!(expected.is_ok());
-                        assert_eq!(vm.pop()?.borrow(), &expected.ok().unwrap());
+                        assert_eq!(vm.pop()?, expected.ok().unwrap());
                     },
                     Err(e) => {
                         assert!(expected.is_err());

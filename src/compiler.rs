@@ -3,7 +3,7 @@ use std::ops::{AddAssign, SubAssign};
 use crate::{
     ast,
     error::{self, ParseError},
-    gc, parser, vm,
+    parser, vm,
     vmgc::{self, Function},
 };
 
@@ -97,7 +97,7 @@ impl<'a> Compiler<'a> {
                 if self.state.scope_depth == 0 {
                     function
                         .chunk
-                        .add_define_global(self.alloc_string(&v.name)?, loc);
+                        .add_define_global(vmgc::Value::String(v.name.to_string()), loc);
                 } else {
                     self.state.locals.last_mut().unwrap().1 =
                         VariableState::Local(self.state.scope_depth);
@@ -154,7 +154,7 @@ impl<'a> Compiler<'a> {
                     .heap
                     .alloc_cell(fun)
                     .map_err(|_| error::ParseError::new("Could not allocate value", loc.clone()))?;
-                let fun_val = self.heap.alloc_cell(vmgc::Value::Function(fun_ptr))?;
+                let fun_val = vmgc::Value::Function(fun_ptr);
                 function.chunk.add_constant(fun_val, loc);
             }
             ast::Stmt::Class(_) => todo!(),
@@ -186,12 +186,12 @@ impl<'a> Compiler<'a> {
                 }
             }
             ast::Expr::Literal(l) => match &l.value {
-                ast::LiteralValue::Number(n) => function
-                    .chunk
-                    .add_constant(self.alloc_value(vmgc::Value::Number(*n))?, loc),
-                ast::LiteralValue::String(s) => {
-                    function.chunk.add_constant(self.alloc_string(&s)?, loc)
+                ast::LiteralValue::Number(n) => {
+                    function.chunk.add_constant(vmgc::Value::Number(*n), loc)
                 }
+                ast::LiteralValue::String(s) => function
+                    .chunk
+                    .add_constant(vmgc::Value::String(s.to_string()), loc),
                 ast::LiteralValue::Bool(b) => match b {
                     true => function.chunk.add_true(loc),
                     false => function.chunk.add_false(loc),
@@ -238,7 +238,7 @@ impl<'a> Compiler<'a> {
                     VariableState::Local(depth) => function.chunk.add_get_local(depth, loc),
                     VariableState::Global => function
                         .chunk
-                        .add_get_global(self.alloc_string(&v.name)?, loc),
+                        .add_get_global(vmgc::Value::String(v.name.to_string()), loc),
                     VariableState::Declared => {
                         return Err(error::Error::Parse(ParseError::new(
                             "Can't read local variable in its own initializer.",
@@ -253,7 +253,7 @@ impl<'a> Compiler<'a> {
                     VariableState::Local(depth) => function.chunk.add_set_local(depth, loc),
                     VariableState::Global => function
                         .chunk
-                        .add_set_global(self.alloc_string(&a.name)?, loc),
+                        .add_set_global(vmgc::Value::String(a.name.to_string()), loc),
                     VariableState::Declared => panic!("declared variable found in assignment"),
                 };
             }
@@ -358,14 +358,6 @@ impl<'a> Compiler<'a> {
         }
         VariableState::Global
     }
-
-    fn alloc_string(&mut self, str: &str) -> Result<vmgc::ValuePtr, gc::AllocError> {
-        self.alloc_value(vmgc::Value::String(str.to_string()))
-    }
-
-    fn alloc_value(&mut self, val: vmgc::Value) -> Result<vmgc::ValuePtr, gc::AllocError> {
-        self.heap.alloc_cell(val)
-    }
 }
 
 #[cfg(test)]
@@ -386,7 +378,7 @@ mod tests {
                 let expected_constants : Vec<vmgc::Value> = vec![$($constant),*];
                 assert_eq!(function.chunk.constants.len(), expected_constants.len());
                 for i in 0..expected_constants.len() {
-                    assert_eq!(&expected_constants[i], function.chunk.constants[i].borrow());
+                    assert_eq!(expected_constants[i], function.chunk.constants[i]);
                 }
                 Ok(())
             }
@@ -536,7 +528,7 @@ mod tests {
                 let expected_constants : Vec<vmgc::Value> = vec![$($constant),*];
                 assert_eq!(function.chunk.constants.len(), expected_constants.len());
                 for i in 0..expected_constants.len() {
-                    assert_eq!(&expected_constants[i], function.chunk.constants[i].borrow());
+                    assert_eq!(expected_constants[i], function.chunk.constants[i]);
                 }
                 Ok(())
             }

@@ -1,24 +1,30 @@
-use std::{collections::BTreeMap, fmt::Display};
+use std::{collections::BTreeMap, fmt::Display, rc::Rc};
 
 use crate::{gc, vm};
 
 pub type Heap = gc::Heap<VmHeader>;
-pub type ValuePtr = gc::CellPtr<Value>;
 pub type FunctionPtr = gc::CellPtr<Function>;
 
-pub type Map = BTreeMap<String, ValuePtr>;
+pub type Map = BTreeMap<String, Value>;
 pub type MapPtr = gc::CellPtr<Map>;
 
-pub type Array = Vec<ValuePtr>;
+pub type Array = Vec<Value>;
 pub type ArrayPtr = gc::CellPtr<Array>;
 
-#[derive(PartialEq, PartialOrd, Debug)]
+pub trait Callable: std::fmt::Debug {
+    fn call(&self, args: Vec<Value>) -> Value;
+
+    fn arity(&self) -> usize;
+}
+
+#[derive(PartialEq, PartialOrd, Debug, Clone)]
 pub enum Value {
     Nil,
     Bool(bool),
     Number(f64),
     String(String),
     Function(FunctionPtr),
+    NativeFunction(by_address::ByAddress<Rc<dyn Callable>>),
     Array(ArrayPtr),
     Map(MapPtr),
 }
@@ -41,6 +47,7 @@ impl Display for Value {
             Value::Number(n) => write!(f, "{}", n),
             Value::String(s) => write!(f, "{}", s),
             Value::Function(fun) => write!(f, "<fn {}>", fun.name),
+            Value::NativeFunction(_) => write!(f, "<native fn>"),
             Value::Array(a) => write!(f, "array len {}", a.len()),
             Value::Map(m) => write!(f, "map with {} entries", m.len()),
         }
@@ -83,17 +90,12 @@ pub struct VmHeader {
 
 #[derive(Clone, Copy)]
 pub enum VmTypeId {
-    Value, // TODO: Pack things
     Function,
     Map,
     Array,
 }
 
 impl gc::AllocTypeId for VmTypeId {}
-
-impl gc::AllocObject<VmTypeId> for Value {
-    const TYPE_ID: VmTypeId = VmTypeId::Value;
-}
 
 impl gc::AllocObject<VmTypeId> for Function {
     const TYPE_ID: VmTypeId = VmTypeId::Function;
@@ -125,38 +127,33 @@ impl gc::AllocHeader for VmHeader {
     }
 
     fn trace(&self, object: std::ptr::NonNull<()>) -> Vec<std::ptr::NonNull<()>> {
-        match self.ty {
-            VmTypeId::Value => {
-                let val = unsafe { object.cast::<Value>().as_ref() };
-                match val {
-                    Value::Function(f) => vec![f.as_ptr().cast::<()>()],
-                    Value::Array(a) => vec![a.as_ptr().cast::<()>()],
-                    Value::Map(m) => vec![m.as_ptr().cast::<()>()],
-                    _ => vec![],
-                }
+        fn trace_value(val: &Value) -> Vec<std::ptr::NonNull<()>> {
+            match val {
+                Value::Function(f) => vec![f.as_ptr().cast::<()>()],
+                Value::Array(a) => vec![a.as_ptr().cast::<()>()],
+                Value::Map(m) => vec![m.as_ptr().cast::<()>()],
+                _ => vec![],
             }
+        }
+        match self.ty {
             VmTypeId::Function => vec![],
             VmTypeId::Map => {
                 let map = unsafe { object.cast::<Map>().as_ref() };
-                map.values()
-                    .map(|v| v.as_ptr().cast::<()>())
-                    .collect::<Vec<_>>()
+                let mut ptrs = vec![];
+                map.values().for_each(|v| ptrs.append(&mut trace_value(v)));
+                ptrs
             }
             VmTypeId::Array => {
                 let array = unsafe { object.cast::<Array>().as_ref() };
-                array
-                    .iter()
-                    .map(|ptr| ptr.as_ptr().cast::<()>())
-                    .collect::<Vec<_>>()
+                let mut ptrs = vec![];
+                array.iter().for_each(|v| ptrs.append(&mut trace_value(v)));
+                ptrs
             }
         }
     }
 
     fn drop(&self, object: std::ptr::NonNull<()>) {
         match self.ty {
-            VmTypeId::Value => unsafe {
-                std::ptr::drop_in_place(object.cast::<Value>().as_ptr());
-            },
             VmTypeId::Function => unsafe {
                 std::ptr::drop_in_place(object.cast::<Function>().as_ptr());
             },
@@ -179,7 +176,6 @@ impl gc::AllocHeader for VmHeader {
 
     fn size(&self) -> usize {
         match self.ty {
-            VmTypeId::Value => std::mem::size_of::<Value>(),
             VmTypeId::Function => std::mem::size_of::<Function>(),
             VmTypeId::Map => std::mem::size_of::<Map>(),
             VmTypeId::Array => std::mem::size_of::<Array>(),
@@ -188,7 +184,6 @@ impl gc::AllocHeader for VmHeader {
 
     fn layout(&self) -> std::alloc::Layout {
         match self.ty {
-            VmTypeId::Value => std::alloc::Layout::new::<Value>(),
             VmTypeId::Function => std::alloc::Layout::new::<Function>(),
             VmTypeId::Map => std::alloc::Layout::new::<Map>(),
             VmTypeId::Array => std::alloc::Layout::new::<Array>(),
