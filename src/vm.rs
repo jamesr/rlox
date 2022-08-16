@@ -257,6 +257,19 @@ impl Vm {
             })
     }
 
+    fn alloc_string(&self, str: String) -> Result<vmgc::StringPtr, error::RuntimeError> {
+        self.state_mut()
+            .heap
+            .borrow_mut()
+            .alloc_cell(str)
+            .map_err(|e| {
+                error::RuntimeError::new(
+                    &format!("Allocation error: {:?}", e),
+                    error::Location::default(),
+                )
+            })
+    }
+
     fn state(&self) -> std::cell::Ref<State> {
         self.state.borrow()
     }
@@ -316,13 +329,13 @@ impl Vm {
 
     fn binary_op_string<F>(&self, op: F) -> Result<(), error::RuntimeError>
     where
-        F: FnOnce(String, String) -> String,
+        F: FnOnce(&str, &str) -> String,
     {
         // The right hand side is at the top of the stack and the left hand side is below.
         if let Value::String(rhs) = self.pop()? {
             if let Value::String(lhs) = self.pop()? {
-                // TODO - extra string copies here
-                self.push(Value::String(op(lhs.to_string(), rhs.to_string())));
+                let str = op(lhs.borrow(), rhs.borrow());
+                self.push(Value::String(self.alloc_string(str)?));
                 return Ok(());
             }
         }
@@ -421,7 +434,7 @@ impl Vm {
                 }
                 OpCode::Add => match self.peek()? {
                     Value::Number(_) => self.binary_op_number(|lhs, rhs| lhs + rhs),
-                    Value::String(_) => self.binary_op_string(|lhs, rhs| lhs + &rhs),
+                    Value::String(_) => self.binary_op_string(|lhs, rhs| lhs.to_string() + rhs),
                     _ => return Err(self.error("Operands must be two strings or two numbers.")),
                 }?,
                 OpCode::Subtract => self.binary_op_number(|lhs, rhs| lhs - rhs)?,
@@ -458,10 +471,11 @@ impl Vm {
                     if let Value::String(name) = name_constant {
                         let value = {
                             let globals = &self.state.borrow().globals;
-                            match globals.get(name) {
+                            match globals.get(name.borrow()) {
                                 Some(v) => v.clone(),
                                 None => {
-                                    return Err(self.error(&format!("Undefined variable {}", name)));
+                                    return Err(self
+                                        .error(&format!("Undefined variable {}", name.borrow())));
                                 }
                             }
                         };
@@ -477,7 +491,7 @@ impl Vm {
                         self.state_mut()
                             .globals
                             .borrow_mut()
-                            .insert(name.to_string(), value);
+                            .insert(name.borrow().to_string(), value);
                     } else {
                         return Err(self.error("global name must be string"));
                     }
@@ -486,10 +500,12 @@ impl Vm {
                     let name_constant = &chunk.constants[index];
                     if let Value::String(name) = name_constant {
                         let value = self.pop()?;
-                        match self.state_mut().globals.borrow_mut().get_mut(name) {
+                        match self.state_mut().globals.borrow_mut().get_mut(name.borrow()) {
                             Some(v) => *v = value,
                             None => {
-                                return Err(self.error(&format!("Undefined variable '{}'", name)));
+                                return Err(
+                                    self.error(&format!("Undefined variable '{}'", name.borrow()))
+                                );
                             }
                         }
                     } else {
@@ -593,12 +609,25 @@ mod tests {
         Ok(())
     }
 
+    thread_local! {
+        static TEST_HEAP: RefCell<Option<vmgc::Heap>>  = RefCell::new(None);
+    }
+
+    fn test_alloc_string(s: &str) -> vmgc::Value {
+        vmgc::Value::String(TEST_HEAP.with(|h| {
+            h.borrow_mut()
+                .as_mut()
+                .unwrap()
+                .alloc_cell(s.to_string())
+                .unwrap()
+        }))
+    }
+
     macro_rules! run_test_add_opcode {
         ($chunk:ident, patch_jump, $_loc:expr, $param:expr) => {
             $chunk.patch_jump($param)
         };
         ($chunk:ident, $opcode:ident, $heap:expr, $loc:expr, $param:expr) => {
-            //let ptr = $heap.alloc_cell($param)?;
             $chunk.$opcode($param, $loc);
         };
         ($chunk:ident, $opcode:ident, $heap:expr, $loc:expr) => {
@@ -615,16 +644,19 @@ mod tests {
                 let mut fun = Function::new(0, "<test>");
                 let mut loc = error::Location::default();
                 let chunk = &mut fun.chunk;
+                TEST_HEAP.with(|h| h.replace(Some(vm.take_heap())));
                 {
                     $(
                         run_test_add_opcode!(chunk, $opcode, heap, loc.clone() $(, $param)?);
                         loc.line = loc.line + 1;
                     )*
                 }
+                TEST_HEAP.with(|h| vm.set_heap(h.take().unwrap()));
                 //fun.chunk.disassemble();
                 let function = vm.alloc_fun(fun)?;
                 vm.push_frame(function)?;
 
+                TEST_HEAP.with(|h| h.replace(Some(vm.take_heap())));
                 let expected: Result::<Value, error::RuntimeError> = $expected;
                 match vm.run_frame(){
                     Ok(()) => {
@@ -670,9 +702,9 @@ mod tests {
 
     run_test!(
         run_add_strings,
-        Ok(Value::String("foobar".to_string())),
-        add_constant => Value::String("foo".to_string()),
-        add_constant => Value::String("bar".to_string()),
+        Ok(test_alloc_string("foobar")),
+        add_constant => test_alloc_string("foo"),
+        add_constant => test_alloc_string("bar"),
         add_add,
         add_return
     );
@@ -683,7 +715,7 @@ mod tests {
                 "Invalid types for binary op.",
                 error::Location { line: 2, col: 0..0 }
             )),
-        add_constant => Value::String("foo".to_string()),
+        add_constant => test_alloc_string("foo"),
         add_constant => Value::Number(1.2),
         add_add,
         add_return

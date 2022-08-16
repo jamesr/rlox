@@ -239,7 +239,11 @@ impl<T: Sized> std::ops::DerefMut for CellPtr<T> {
 
 impl<T: Sized + Debug> Debug for CellPtr<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("CellPtr -> {:?}", self.borrow()))
+        f.write_fmt(format_args!(
+            "CellPtr({:?}) -> {:?}",
+            self.as_ptr(),
+            self.borrow()
+        ))
     }
 }
 

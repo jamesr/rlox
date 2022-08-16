@@ -97,7 +97,7 @@ impl<'a> Compiler<'a> {
                 if self.state.scope_depth == 0 {
                     function
                         .chunk
-                        .add_define_global(vmgc::Value::String(v.name.to_string()), loc);
+                        .add_define_global(self.alloc_string(&v.name), loc);
                 } else {
                     self.state.locals.last_mut().unwrap().1 =
                         VariableState::Local(self.state.scope_depth);
@@ -189,9 +189,9 @@ impl<'a> Compiler<'a> {
                 ast::LiteralValue::Number(n) => {
                     function.chunk.add_constant(vmgc::Value::Number(*n), loc)
                 }
-                ast::LiteralValue::String(s) => function
-                    .chunk
-                    .add_constant(vmgc::Value::String(s.to_string()), loc),
+                ast::LiteralValue::String(s) => {
+                    function.chunk.add_constant(self.alloc_string(s), loc)
+                }
                 ast::LiteralValue::Bool(b) => match b {
                     true => function.chunk.add_true(loc),
                     false => function.chunk.add_false(loc),
@@ -238,7 +238,7 @@ impl<'a> Compiler<'a> {
                     VariableState::Local(depth) => function.chunk.add_get_local(depth, loc),
                     VariableState::Global => function
                         .chunk
-                        .add_get_global(vmgc::Value::String(v.name.to_string()), loc),
+                        .add_get_global(self.alloc_string(&v.name), loc),
                     VariableState::Declared => {
                         return Err(error::Error::Parse(ParseError::new(
                             "Can't read local variable in its own initializer.",
@@ -253,7 +253,7 @@ impl<'a> Compiler<'a> {
                     VariableState::Local(depth) => function.chunk.add_set_local(depth, loc),
                     VariableState::Global => function
                         .chunk
-                        .add_set_global(vmgc::Value::String(a.name.to_string()), loc),
+                        .add_set_global(self.alloc_string(&a.name), loc),
                     VariableState::Declared => panic!("declared variable found in assignment"),
                 };
             }
@@ -358,10 +358,16 @@ impl<'a> Compiler<'a> {
         }
         VariableState::Global
     }
+
+    fn alloc_string(&mut self, s: &str) -> vmgc::Value {
+        vmgc::Value::String(self.heap.alloc_cell(s.to_string()).unwrap())
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::cell::RefCell;
+
     use super::*;
     use crate::{ast, error, vm};
 
@@ -431,6 +437,14 @@ mod tests {
         [vmgc::Value::Number(1.2), vmgc::Value::Number(4.7)]
     );
 
+    thread_local! {
+        static TEST_HEAP: RefCell<vmgc::Heap>  = RefCell::new(vmgc::Heap::new());
+    }
+
+    fn test_alloc_string(s: &str) -> vmgc::Value {
+        vmgc::Value::String(TEST_HEAP.with(|h| h.borrow_mut().alloc_cell(s.to_string()).unwrap()))
+    }
+
     compile_expr_test!(
         compile_add_strings,
         ast::Expr::binary(
@@ -443,10 +457,7 @@ mod tests {
             vm::OpCode::Constant(1),
             vm::OpCode::Add
         ],
-        [
-            vmgc::Value::String("foo".to_string()),
-            vmgc::Value::String("bar".to_string())
-        ]
+        [test_alloc_string("foo"), test_alloc_string("bar")]
     );
 
     compile_expr_test!(
