@@ -152,6 +152,23 @@ impl gc::AllocHeader for VmHeader {
         }
     }
 
+    fn drop(&self, object: std::ptr::NonNull<()>) {
+        match self.ty {
+            VmTypeId::Value => unsafe {
+                std::ptr::drop_in_place(object.cast::<Value>().as_ptr());
+            },
+            VmTypeId::Function => unsafe {
+                std::ptr::drop_in_place(object.cast::<Function>().as_ptr());
+            },
+            VmTypeId::Map => unsafe {
+                std::ptr::drop_in_place(object.cast::<Map>().as_ptr());
+            },
+            VmTypeId::Array => unsafe {
+                std::ptr::drop_in_place(object.cast::<Array>().as_ptr());
+            },
+        }
+    }
+
     fn set_mark(&mut self, mark: gc::Mark) {
         self.mark = mark;
     }

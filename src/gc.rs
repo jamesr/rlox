@@ -65,6 +65,8 @@ pub trait AllocHeader: Sized {
 
     fn new_array<T: AllocObject<Self::TypeId>>(size: usize, mark: Mark) -> Self;
 
+    fn drop(&self, object: NonNull<()>);
+
     fn trace(&self, object: NonNull<()>) -> Vec<NonNull<()>>;
 
     fn set_mark(&mut self, mark: Mark);
@@ -313,8 +315,7 @@ impl<H: AllocHeader> Heap<H> {
                 header.set_mark(Mark::Allocated);
                 still_active.push(header_ptr);
             } else {
-                // TODO: Drop the object somehow - through the trait?
-                // let object = Heap::<H>::get_object(*header_ptr);
+                header.drop(Heap::<H>::get_object(header_ptr));
                 let ptr = header_ptr.as_ptr() as *mut u8;
                 if self.tracing {
                     println!("deallocating {:?}", ptr);
@@ -361,6 +362,7 @@ mod tests {
     enum TestTypeId {
         Number,
         ObjectWithPtrs,
+        DropItem,
     }
 
     impl AllocTypeId for TestTypeId {}
@@ -410,6 +412,20 @@ mod tests {
                         .map(|c| c.inner.get().ptr.cast::<()>())
                         .collect::<Vec<_>>()
                 }
+                TestTypeId::DropItem => vec![],
+            }
+        }
+
+        fn drop(&self, object: NonNull<()>) {
+            match self.ty {
+                TestTypeId::Number => {}
+                TestTypeId::ObjectWithPtrs => {}
+                TestTypeId::DropItem => {
+                    unsafe {
+                        let ptr = object.cast::<DropItem>().as_ptr();
+                        std::ptr::drop_in_place(ptr);
+                    };
+                }
             }
         }
 
@@ -422,13 +438,18 @@ mod tests {
         }
 
         fn size(&self) -> usize {
-            0
+            match self.ty {
+                TestTypeId::Number => std::mem::size_of::<Number>(),
+                TestTypeId::ObjectWithPtrs => std::mem::size_of::<ObjectWithPtrs>(),
+                TestTypeId::DropItem => std::mem::size_of::<DropItem>(),
+            }
         }
 
         fn layout(&self) -> Layout {
             match self.ty {
                 TestTypeId::Number => Layout::new::<Number>(),
                 TestTypeId::ObjectWithPtrs => Layout::new::<ObjectWithPtrs>(),
+                TestTypeId::DropItem => Layout::new::<DropItem>(),
             }
         }
 
@@ -475,5 +496,53 @@ mod tests {
         heap.remove_root(cell_ptr_two.clone());
         assert_eq!(heap.collect(), 2);
         Ok(())
+    }
+
+    struct DropTracker {
+        dropped: HashSet<i32>,
+    }
+
+    impl DropTracker {
+        fn new() -> Self {
+            Self {
+                dropped: HashSet::new(),
+            }
+        }
+        fn add_drop(&mut self, id: i32) {
+            self.dropped.insert(id);
+        }
+
+        fn dropped(&self, id: i32) -> bool {
+            self.dropped.contains(&id)
+        }
+    }
+
+    struct DropItem<'a> {
+        id: i32,
+        tracker: &'a mut DropTracker,
+    }
+
+    impl<'a> Drop for DropItem<'a> {
+        fn drop(&mut self) {
+            self.tracker.add_drop(self.id);
+        }
+    }
+
+    impl AllocObject<TestTypeId> for DropItem<'_> {
+        const TYPE_ID: TestTypeId = TestTypeId::DropItem;
+    }
+
+    #[test]
+    fn drop_test() {
+        let mut tracker = DropTracker::new();
+        let mut heap = Heap::<TestHeader>::new();
+        let item = DropItem {
+            id: 1,
+            tracker: &mut tracker,
+        };
+        let _ptr = heap.alloc(item);
+        assert!(!tracker.dropped(1));
+        assert_eq!(heap.collect(), 1);
+        assert!(tracker.dropped(1));
     }
 }
